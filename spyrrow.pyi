@@ -1,6 +1,8 @@
-type Point = tuple[float,float]
+from typing import TypeAlias
 
-type ItemId = int
+Point: TypeAlias = tuple[float,float]
+
+ItemId: TypeAlias = int
 
 class Item:
     demand:int
