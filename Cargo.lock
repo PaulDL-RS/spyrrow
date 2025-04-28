@@ -301,7 +301,7 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 [[package]]
 name = "jagua-rs"
 version = "0.4.0"
-source = "git+https://github.com/JeroenGar/jagua-rs.git?rev=acad15611349bd9ec2cc8cc645db3ca73764afcf#acad15611349bd9ec2cc8cc645db3ca73764afcf"
+source = "git+https://github.com/JeroenGar/jagua-rs.git?rev=eb78f5e255890f95bc900dd0b7fed7f5d9f7a5cd#eb78f5e255890f95bc900dd0b7fed7f5d9f7a5cd"
 dependencies = [
  "float-cmp",
  "geo-offset",
@@ -725,7 +725,7 @@ dependencies = [
 [[package]]
 name = "sparrow"
 version = "0.1.0"
-source = "git+https://github.com/JeroenGar/sparrow.git?rev=7cc981b47beca48add01dfcc4bc350b7474dd90b#7cc981b47beca48add01dfcc4bc350b7474dd90b"
+source = "git+https://github.com/JeroenGar/sparrow.git?rev=74395dac365c6621bc5029483eded58ba27ec9da#74395dac365c6621bc5029483eded58ba27ec9da"
 dependencies = [
  "clap",
  "ctrlc",
@@ -752,7 +752,7 @@ dependencies = [
 
 [[package]]
 name = "spyrrow"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "jagua-rs",
  "pyo3",

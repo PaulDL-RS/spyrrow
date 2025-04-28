@@ -1,5 +1,5 @@
 use jagua_rs::io::json_instance::{JsonInstance, JsonItem, JsonShape, JsonSimplePoly, JsonStrip};
-use jagua_rs::io::parser::Parser;
+use jagua_rs::io::parse::Parser;
 use pyo3::prelude::*;
 use rand::prelude::SmallRng;
 use rand::SeedableRng;
@@ -7,6 +7,7 @@ use sparrow::config::{
     CDE_CONFIG, COMPRESS_TIME_RATIO, EXPLORE_TIME_RATIO, MIN_ITEM_SEPARATION, SIMPL_TOLERANCE,
 };
 use sparrow::optimizer::{optimize, Terminator};
+use sparrow::util::io::json_export::JsonOutput;
 use sparrow::util::io::to_sp_instance;
 use std::fs;
 use std::time::Duration;
@@ -55,7 +56,6 @@ impl From<ItemPy> for JsonItem {
 #[derive(Clone, Debug)]
 struct PlacedItemPy {
     pub id: usize,
-    pub shape: Vec<(f32, f32)>,
     pub translation: (f32, f32),
     pub rotation: f32,
 }
@@ -106,8 +106,8 @@ impl StripPackingInstancePy {
         // Temporary output dir for intermediary solution
 
         // let tmp = TempDir::new().expect("could not create output directory");
-        let tmp_str = "tmp";
-        fs::create_dir_all(tmp_str).expect("Temporary foulder should be created");
+        let tmp_str = String::from("tmp");
+        fs::create_dir_all(&tmp_str).expect("Temporary foulder should be created");
 
         // Reproductibility
         let seed = rand::random();
@@ -131,31 +131,31 @@ impl StripPackingInstancePy {
         let any_instance = parser.parse(&json_instance);
         let instance = to_sp_instance(any_instance.as_ref()).expect("Expected SPInstance");
 
-        let output_folder_path = format!("{:?}/sols_{}", tmp_str, json_instance.name);
-
         let terminator = Terminator::new_with_ctrlc_handler();
         py.allow_threads(move || {
             let solution = optimize(
                 instance.clone(),
                 rng,
-                output_folder_path,
+                tmp_str.clone(),
                 terminator,
                 explore_dur,
                 compress_dur,
             );
             let density = solution.density(&instance);
-            let placed_items: Vec<PlacedItemPy> = solution
-                .layout_snapshot
+
+            let mut json_output = JsonOutput::new(json_instance.clone(), &solution, &instance);
+            // TODO Verify that layouts is not empty and if that is even possible
+            let solution_layout = json_output.solution.layouts.remove(0);
+            let placed_items: Vec<PlacedItemPy> = solution_layout
                 .placed_items
                 .into_iter()
-                .map(|(_, item)| PlacedItemPy {
-                    id: item.item_id,
-                    shape: item.shape.vertices.iter().map(|p| (p.0, p.1)).collect(),
-                    rotation: *item.d_transf.rotation,
-                    translation: (*item.d_transf.translation.0, *item.d_transf.translation.1),
+                .map(|jpi| PlacedItemPy {
+                    id: jpi.index,
+                    rotation: jpi.transformation.rotation,
+                    translation: jpi.transformation.translation,
                 })
                 .collect();
-            fs::remove_dir_all(tmp_str).expect("Should be able to remove tmp dir");
+            fs::remove_dir_all(&tmp_str).expect("Should be able to remove tmp dir");
             StripPackingSolutionPy {
                 width: solution.strip_width,
                 density,
