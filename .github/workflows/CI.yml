@@ -179,30 +179,54 @@ jobs:
   #         command: upload
   #         args: --non-interactive --skip-existing wheels-*/*
 
-  testpypi-release:
-    name: Release on Test PyPi to ensure the CI/CD validity
-    runs-on: ubuntu-latest
-    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+  # testpypi-release:
+  #   name: Release on Test PyPi to ensure the CI/CD validity
+  #   runs-on: ubuntu-latest
+  #   if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+  #   needs: [linux, musllinux, windows, macos, sdist]
+  #   environment: 
+  #     name: testpypi
+  #     url: https://test.pypi.org/p/spyrrow
+  #   permissions:
+  #     # Use to sign the release artifacts
+  #     id-token: write
+  #     # Used to upload release artifacts
+  #     contents: write
+  #     # Used to generate artifact attestation
+  #     attestations: write
+  #   steps:
+  #     - uses: actions/download-artifact@v4
+  #     - name: Generate artifact attestation
+  #       uses: actions/attest-build-provenance@v2
+  #       with:
+  #         subject-path: 'wheels-*/*'
+  #     - name: Publish to TestPyPI
+  #       if: ${{ startsWith(github.ref, 'refs/tags/') }}
+  #       uses: PyO3/maturin-action@v1
+  #       with:
+  #         command: upload
+  #         args: --non-interactive --skip-existing wheels-*/* --repository-url https://test.pypi.org/legacy/
+
+  publish-to-testpypi:
+    name: Publish Python 🐍 distribution 📦 to TestPyPI
     needs: [linux, musllinux, windows, macos, sdist]
-    environment: 
+    runs-on: ubuntu-latest
+
+    environment:
       name: testpypi
       url: https://test.pypi.org/p/spyrrow
+
     permissions:
-      # Use to sign the release artifacts
-      id-token: write
-      # Used to upload release artifacts
-      contents: write
-      # Used to generate artifact attestation
-      attestations: write
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
+
     steps:
-      - uses: actions/download-artifact@v4
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: 'wheels-*/*'
-      - name: Publish to TestPyPI
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: PyO3/maturin-action@v1
-        with:
-          command: upload
-          args: --non-interactive --skip-existing wheels-*/* --repository-url https://test.pypi.org/legacy/
+    - name: Download all the dists
+      uses: actions/download-artifact@v4
+    - name: Generate artifact attestation
+      uses: actions/attest-build-provenance@v2
+      with:
+        subject-path: 'wheels-*/*'
+    - name: Publish distribution 📦 to TestPyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
