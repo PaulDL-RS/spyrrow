@@ -218,6 +218,10 @@ jobs:
 
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
+      # Used to upload release artifacts
+      contents: write
+      # Used to generate artifact attestation
+      attestations: write
 
     steps:
     - name: Download all the dists
