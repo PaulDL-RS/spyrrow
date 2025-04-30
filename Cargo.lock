@@ -752,7 +752,7 @@ dependencies = [
 
 [[package]]
 name = "spyrrow"
-version = "0.1.2"
+version = "0.1.0"
 dependencies = [
  "jagua-rs",
  "pyo3",
