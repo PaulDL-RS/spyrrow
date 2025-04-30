@@ -203,7 +203,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: upload
-          args: --non-interactive --skip-existing wheels-*/* --repository-url https://test.pypi.org/legacy/ --verbose
+          args: --non-interactive --skip-existing wheels-*/* --repository-url=https://test.pypi.org/legacy/ --verbose
 
   # publish-to-testpypi:
   #   name: Publish Python 🐍 distribution 📦 to TestPyPI
