@@ -21,14 +21,20 @@ for pi in sol.placed_items:
     print("\n")
 ```
 
+## Informations
+
+The algorithmn is  insensitive to rotation angles and shapes complexity (to a certain extend)
 
 # TODOS
 
 ## Pay attention to that
 
-- Edition mismatch between jagua-rs ("2024") and the one chosen by maturin new ("2021")
 
-- pay attention to fsize the floating point size changing based on jagua-rs compilation mode
+use test-profile for local developpment
+
+investiguate the compile options, nightly and SIMD and PyPa target architectures
+
+- add presets for parameters as enums 
 
 ## Mixed project Python/Rust
 possibility to add conversion from shapely in a shapely variant
