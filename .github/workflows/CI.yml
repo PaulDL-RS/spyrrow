@@ -226,6 +226,8 @@ jobs:
     steps:
     - name: Download all the dists
       uses: actions/download-artifact@v4
+      with:
+        path: dist
     - name: Generate artifact attestation
       uses: actions/attest-build-provenance@v2
       with:
@@ -234,3 +236,4 @@ jobs:
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         repository-url: https://test.pypi.org/legacy/
+
