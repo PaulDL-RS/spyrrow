@@ -231,7 +231,7 @@ jobs:
     - name: Generate artifact attestation
       uses: actions/attest-build-provenance@v2
       with:
-        subject-path: 'wheels-*/*'
+        subject-path: 'dist/wheels-*/*'
     - name: Publish distribution 📦 to TestPyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
