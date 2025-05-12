@@ -9,7 +9,11 @@ class Item:
     allowed_orientations: list[float] | None
 
     def __init__(
-        self, shape: list[Point], demand: int, allowed_orientations: list[float] | None
+        self,
+        id: int,
+        shape: list[Point],
+        demand: int,
+        allowed_orientations: list[float] | None,
     ): ...
 
 class PlacedItem:

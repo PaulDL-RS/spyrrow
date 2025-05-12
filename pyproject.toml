@@ -14,3 +14,9 @@ license = { file = "LICENSE.txt" }
 dynamic = ["version"]
 [tool.maturin]
 features = ["pyo3/extension-module"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+]
