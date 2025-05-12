@@ -109,7 +109,8 @@ impl StripPackingInstancePy {
         }
     }
 
-    fn solve(&self, computation_time: Option<u64>, py: Python) -> StripPackingSolutionPy {
+    #[pyo3(signature = (computation_time=600))]
+    fn solve(&self, computation_time: u64, py: Python) -> StripPackingSolutionPy {
         // Temporary output dir for intermediary solution
 
         // let tmp = TempDir::new().expect("could not create output directory");
@@ -121,17 +122,10 @@ impl StripPackingInstancePy {
         let rng = SmallRng::seed_from_u64(seed);
 
         // Execution Time
-        let (explore_dur, compress_dur) = if let Some(ct) = computation_time {
-            (
-                Duration::from_secs(ct).mul_f32(EXPLORE_TIME_RATIO),
-                Duration::from_secs(ct).mul_f32(COMPRESS_TIME_RATIO),
-            )
-        } else {
-            (
-                Duration::from_secs(600).mul_f32(EXPLORE_TIME_RATIO),
-                Duration::from_secs(600).mul_f32(COMPRESS_TIME_RATIO),
-            )
-        };
+        let (explore_dur, compress_dur) = (
+            Duration::from_secs(computation_time).mul_f32(EXPLORE_TIME_RATIO),
+            Duration::from_secs(computation_time).mul_f32(COMPRESS_TIME_RATIO),
+        );
 
         let ext_instance = self.clone().into();
         let importer = Importer::new(CDE_CONFIG, SIMPL_TOLERANCE, MIN_ITEM_SEPARATION);
