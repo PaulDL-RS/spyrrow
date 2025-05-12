@@ -1,5 +1,6 @@
-use jagua_rs::io::json_instance::{JsonInstance, JsonItem, JsonShape, JsonSimplePoly, JsonStrip};
-use jagua_rs::io::parse::Parser;
+use jagua_rs::io::ext_repr::{ExtItem as BaseItem, ExtSPolygon, ExtShape};
+use jagua_rs::io::import::Importer;
+use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance};
 use pyo3::prelude::*;
 use rand::prelude::SmallRng;
 use rand::SeedableRng;
@@ -7,14 +8,14 @@ use sparrow::config::{
     CDE_CONFIG, COMPRESS_TIME_RATIO, EXPLORE_TIME_RATIO, MIN_ITEM_SEPARATION, SIMPL_TOLERANCE,
 };
 use sparrow::optimizer::{optimize, Terminator};
-use sparrow::util::io::json_export::JsonOutput;
-use sparrow::util::io::to_sp_instance;
+use sparrow::EPOCH;
 use std::fs;
 use std::time::Duration;
 
 #[pyclass(name = "Item", get_all, set_all)]
 #[derive(Clone)]
 struct ItemPy {
+    id: u64,
     demand: u64,
     allowed_orientations: Option<Vec<f32>>,
     shape: Vec<(f32, f32)>,
@@ -23,8 +24,14 @@ struct ItemPy {
 #[pymethods]
 impl ItemPy {
     #[new]
-    fn new(shape: Vec<(f32, f32)>, demand: u64, allowed_orientations: Option<Vec<f32>>) -> Self {
+    fn new(
+        id: u64,
+        shape: Vec<(f32, f32)>,
+        demand: u64,
+        allowed_orientations: Option<Vec<f32>>,
+    ) -> Self {
         ItemPy {
+            id,
             demand,
             allowed_orientations,
             shape,
@@ -33,21 +40,25 @@ impl ItemPy {
 
     fn __repr__(&self) -> String {
         format!(
-            "Item(shape={:?}, demand='{}', allowed_orientations={:?})",
-            self.shape, self.demand, self.allowed_orientations
+            "Item(id={},shape={:?}, demand='{}', allowed_orientations={:?})",
+            self.id, self.shape, self.demand, self.allowed_orientations
         )
     }
 }
 
-impl From<ItemPy> for JsonItem {
+impl From<ItemPy> for ExtItem {
     fn from(value: ItemPy) -> Self {
-        let shape = JsonShape::SimplePolygon(JsonSimplePoly(value.shape));
-        JsonItem {
+        let polygon = ExtSPolygon(value.shape);
+        let shape = ExtShape::SimplePolygon(polygon);
+        let base = BaseItem {
+            id: value.id,
             allowed_orientations: value.allowed_orientations,
-            demand: value.demand,
             shape,
-            value: None,
-            base_quality: None,
+            min_quality: None,
+        };
+        ExtItem {
+            base,
+            demand: value.demand,
         }
     }
 }
@@ -55,7 +66,7 @@ impl From<ItemPy> for JsonItem {
 #[pyclass(name = "PlacedItem", get_all)]
 #[derive(Clone, Debug)]
 struct PlacedItemPy {
-    pub id: usize,
+    pub id: u64,
     pub translation: (f32, f32),
     pub rotation: f32,
 }
@@ -76,16 +87,12 @@ struct StripPackingInstancePy {
     pub items: Vec<ItemPy>,
 }
 
-impl From<StripPackingInstancePy> for JsonInstance {
+impl From<StripPackingInstancePy> for ExtSPInstance {
     fn from(value: StripPackingInstancePy) -> Self {
         let items = value.items.into_iter().map(|v| v.into()).collect();
-        let strip = Some(JsonStrip {
-            height: value.height,
-        });
-        JsonInstance {
+        ExtSPInstance {
             name: value.name,
-            bins: None,
-            strip,
+            strip_height: value.height,
             items,
         }
     }
@@ -126,13 +133,14 @@ impl StripPackingInstancePy {
             )
         };
 
-        let json_instance = self.clone().into();
-        let parser = Parser::new(CDE_CONFIG, SIMPL_TOLERANCE, MIN_ITEM_SEPARATION);
-        let any_instance = parser.parse(&json_instance);
-        let instance = to_sp_instance(any_instance.as_ref()).expect("Expected SPInstance");
+        let ext_instance = self.clone().into();
+        let importer = Importer::new(CDE_CONFIG, SIMPL_TOLERANCE, MIN_ITEM_SEPARATION);
+        // TODO Investigate the rules about ids
+        let instance = jagua_rs::probs::spp::io::import(&importer, &ext_instance)
+            .expect("Expected a Strip Packing Problem Instance");
 
-        let terminator = Terminator::new_with_ctrlc_handler();
         py.allow_threads(move || {
+            let terminator = Terminator::new_with_ctrlc_handler();
             let solution = optimize(
                 instance.clone(),
                 rng,
@@ -141,16 +149,15 @@ impl StripPackingInstancePy {
                 explore_dur,
                 compress_dur,
             );
-            let density = solution.density(&instance);
 
-            let mut json_output = JsonOutput::new(json_instance.clone(), &solution, &instance);
-            // TODO Verify that layouts is not empty and if that is even possible
-            let solution_layout = json_output.solution.layouts.remove(0);
-            let placed_items: Vec<PlacedItemPy> = solution_layout
+            let solution = jagua_rs::probs::spp::io::export(&instance, &solution, *EPOCH);
+
+            let placed_items: Vec<PlacedItemPy> = solution
+                .layout
                 .placed_items
                 .into_iter()
                 .map(|jpi| PlacedItemPy {
-                    id: jpi.index,
+                    id: jpi.item_id,
                     rotation: jpi.transformation.rotation,
                     translation: jpi.transformation.translation,
                 })
@@ -158,7 +165,7 @@ impl StripPackingInstancePy {
             fs::remove_dir_all(&tmp_str).expect("Should be able to remove tmp dir");
             StripPackingSolutionPy {
                 width: solution.strip_width,
-                density,
+                density: solution.density,
                 placed_items,
             }
         })

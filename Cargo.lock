@@ -53,6 +53,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.98"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
+
+[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -185,6 +191,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "document-features"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95249b50c6c185bee49034bcb378a49dc2b5dff0be90ff6616d31d64febab05d"
+dependencies = [
+ "litrs",
+]
+
+[[package]]
 name = "dtoa"
 version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -300,9 +315,21 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
 name = "jagua-rs"
-version = "0.4.0"
-source = "git+https://github.com/JeroenGar/jagua-rs.git?rev=eb78f5e255890f95bc900dd0b7fed7f5d9f7a5cd#eb78f5e255890f95bc900dd0b7fed7f5d9f7a5cd"
+version = "0.5.0"
+source = "git+https://github.com/JeroenGar/jagua-rs.git?rev=19291ebbddb07c380149130ce29c88146ef404cb#19291ebbddb07c380149130ce29c88146ef404cb"
 dependencies = [
+ "document-features",
+ "jagua-rs-base",
+ "jagua-rs-spp",
+]
+
+[[package]]
+name = "jagua-rs-base"
+version = "0.5.0"
+source = "git+https://github.com/JeroenGar/jagua-rs.git?rev=19291ebbddb07c380149130ce29c88146ef404cb#19291ebbddb07c380149130ce29c88146ef404cb"
+dependencies = [
+ "anyhow",
+ "document-features",
  "float-cmp",
  "geo-offset",
  "geo-types",
@@ -310,12 +337,23 @@ dependencies = [
  "log",
  "ndarray",
  "ordered-float",
- "rand",
  "rand_distr",
- "rayon",
  "serde",
  "slotmap",
+ "svg",
  "tribool",
+]
+
+[[package]]
+name = "jagua-rs-spp"
+version = "0.5.0"
+source = "git+https://github.com/JeroenGar/jagua-rs.git?rev=19291ebbddb07c380149130ce29c88146ef404cb#19291ebbddb07c380149130ce29c88146ef404cb"
+dependencies = [
+ "anyhow",
+ "itertools",
+ "jagua-rs-base",
+ "rayon",
+ "serde",
 ]
 
 [[package]]
@@ -370,6 +408,12 @@ name = "libm"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8355be11b20d696c8f18f6cc018c4e372165b1fa8126cef092399c9951984ffa"
+
+[[package]]
+name = "litrs"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ce301924b7887e9d637144fdade93f9dfff9b60981d4ac161db09720d39aa5"
 
 [[package]]
 name = "log"
@@ -725,8 +769,9 @@ dependencies = [
 [[package]]
 name = "sparrow"
 version = "0.1.0"
-source = "git+https://github.com/JeroenGar/sparrow.git?rev=74395dac365c6621bc5029483eded58ba27ec9da#74395dac365c6621bc5029483eded58ba27ec9da"
+source = "git+https://github.com/JeroenGar/sparrow.git?rev=18044e6f91c6e0894c62a1aaac8e3b50c0f13a5c#18044e6f91c6e0894c62a1aaac8e3b50c0f13a5c"
 dependencies = [
+ "anyhow",
  "clap",
  "ctrlc",
  "fern",
@@ -737,7 +782,6 @@ dependencies = [
  "log",
  "num_cpus",
  "numfmt",
- "once_cell",
  "ordered-float",
  "rand",
  "rand_distr",
@@ -752,7 +796,7 @@ dependencies = [
 
 [[package]]
 name = "spyrrow"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "jagua-rs",
  "pyo3",
