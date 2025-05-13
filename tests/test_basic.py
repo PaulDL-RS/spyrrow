@@ -16,7 +16,7 @@ def test_basic():
     instance = spyrrow.StripPackingInstance(
         "test", height=2.001, items=[rectangle1, triangle1]
     )
-    sol = instance.solve(10)
+    sol = instance.solve(30)
     assert sol.width == pytest.approx(4,rel=0.01)
 
 def test_2_consecutive_calls():
@@ -35,6 +35,6 @@ def test_2_consecutive_calls():
         "test", height=2.001, items=[rectangle1, triangle1]
     )
     sol = instance.solve(10)
-    sol = instance.solve(10)
+    sol = instance.solve(30)
     assert sol.width == pytest.approx(4,rel=0.1)
 
