@@ -134,7 +134,7 @@ impl StripPackingInstancePy {
             .expect("Expected a Strip Packing Problem Instance");
 
         py.allow_threads(move || {
-            let terminator = Terminator::new_with_ctrlc_handler();
+            let terminator = Terminator::new_without_ctrlc();
             let solution = optimize(
                 instance.clone(),
                 rng,
