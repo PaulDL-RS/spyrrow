@@ -24,16 +24,11 @@ struct ItemPy {
 #[pymethods]
 impl ItemPy {
     #[new]
-    fn new(
-        id: u64,
-        shape: Vec<(f32, f32)>,
-        demand: u64,
-        allowed_orientations: Option<Vec<f32>>,
-    ) -> Self {
+    fn new(id: u64, shape: Vec<(f32, f32)>, demand: u64, allowed_orientations: Vec<f32>) -> Self {
         ItemPy {
             id,
             demand,
-            allowed_orientations,
+            allowed_orientations: Some(allowed_orientations),
             shape,
         }
     }

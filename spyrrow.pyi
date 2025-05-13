@@ -6,14 +6,14 @@ class Item:
     id: int
     demand: int
     shape: list[Point]
-    allowed_orientations: list[float] | None
+    allowed_orientations: list[float]
 
     def __init__(
         self,
         id: int,
         shape: list[Point],
         demand: int,
-        allowed_orientations: list[float] | None,
+        allowed_orientations: list[float],
     ): ...
 
 class PlacedItem:
