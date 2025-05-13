@@ -252,28 +252,28 @@ jobs:
           command: upload
           args: --non-interactive --skip-existing wheels-*/*
 
-  testpypi-release:
-    name: Release on Test PyPi to ensure the CI/CD validity
-    runs-on: ubuntu-latest
-    needs: [linux, musllinux, windows, macos, sdist]
-    environment: 
-      name: testpypi
-      url: https://test.pypi.org/p/spyrrow
-    permissions:
-      # Use to sign the release artifacts
-      id-token: write
-      # Used to upload release artifacts
-      contents: write
-      # Used to generate artifact attestation
-      attestations: write
-    steps:
-      - uses: actions/download-artifact@v4
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: 'wheels-*/*'
-      - name: Publish to TestPyPI
-        uses: PyO3/maturin-action@v1
-        with:
-          command: upload
-          args: --non-interactive --skip-existing wheels-*/* --repository-url=https://test.pypi.org/legacy/ --verbose
+  # testpypi-release:
+  #   name: Release on Test PyPi to ensure the CI/CD validity
+  #   runs-on: ubuntu-latest
+  #   needs: [linux, musllinux, windows, macos, sdist]
+  #   environment: 
+  #     name: testpypi
+  #     url: https://test.pypi.org/p/spyrrow
+  #   permissions:
+  #     # Use to sign the release artifacts
+  #     id-token: write
+  #     # Used to upload release artifacts
+  #     contents: write
+  #     # Used to generate artifact attestation
+  #     attestations: write
+  #   steps:
+  #     - uses: actions/download-artifact@v4
+  #     - name: Generate artifact attestation
+  #       uses: actions/attest-build-provenance@v2
+  #       with:
+  #         subject-path: 'wheels-*/*'
+  #     - name: Publish to TestPyPI
+  #       uses: PyO3/maturin-action@v1
+  #       with:
+  #         command: upload
+  #         args: --non-interactive --skip-existing wheels-*/* --repository-url=https://test.pypi.org/legacy/ --verbose
