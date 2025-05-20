@@ -10,6 +10,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
+authors = [ {name = "Paul Durand-Lupinski", email = "paul.durand-lupinski@reeverse-systems.com"}]
 license = { file = "LICENSE.txt" }
 dynamic = ["version"]
 [tool.maturin]
@@ -19,4 +20,5 @@ features = ["pyo3/extension-module"]
 dev = [
     "pytest",
     "ruff",
+    "sphinx>=8.1.3",
 ]
