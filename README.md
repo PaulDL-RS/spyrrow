@@ -1,15 +1,34 @@
 # Spyrrow
 
-Python wrapper on the Rust project [`sparrow`](https://github.com/JeroenGar/sparrow)
+`spyrrow` is a Python wrapper on the Rust project [`sparrow`](https://github.com/JeroenGar/sparrow).
+It enables to solve 2D [Strip packing problems](https://en.wikipedia.org/wiki/Strip_packing_problem). 
+
+## Installation
+
+Spyrrow is hosted on [PyPI](https://pypi.org/project/spyrrow/).
+
+You can install with the package manager of your choice, using the PyPI package index.
+
+For example, with `pip`, the default Python package:
+```bash
+pip install spyrrow
+```
 
 ## Examples
 ```python
 import spyrrow
 
-rectangle1 = spyrrow.Item([(0,0),(1,0),(1,1),(0,1),(0,0)], demand=4, allowed_orientations=[0])
-triangle1 = spyrrow.Item([(0,0),(1,0),(1,1),(0,0)], demand=6, allowed_orientations=[0,90,180,-90])
+rectangle1 = spyrrow.Item(
+        0, [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0]
+    )
+triangle1 = spyrrow.Item(
+        1,
+        [(0, 0), (1, 0), (1, 1), (0, 0)],
+        demand=6,
+        allowed_orientations=[0, 90, 180, -90],
+    )
 
-instance = spyrrow.StripPackingInstance("test", height=2.001, items=[rectangle1,triangle1])
+instance = spyrrow.StripPackingInstance("test", strip_height=2.001, items=[rectangle1,triangle1])
 sol:spyrrow.StripPackingSolution = instance.solve(30)
 print(sol.width)
 print(sol.density)
@@ -21,22 +40,12 @@ for pi in sol.placed_items:
     print("\n")
 ```
 
-## Informations
+## Contributing
 
-The algorithmn is  insensitive to rotation angles and shapes complexity (to a certain extend)
+Spyrrow is open to contributions.
+The first target should be to reach  Python open sources packages standards and practices. 
+Second, a easier integration with the package `shapely` is envsionned.
 
-# TODOS
-
-## Pay attention to that
-
-
-use test-profile for local developpment
-
-investiguate the compile options, nightly and SIMD and PyPa target architectures
-
-- add presets for parameters as enums 
-
-## Mixed project Python/Rust
-possibility to add conversion from shapely in a shapely variant
-investiguate the possibility of maturin to handle extras
-
+Please use GitHub issues to request features. 
+They will be considered relative to what is already implemented in the parent library `sparrow`. 
+If necessary, they can be forwarded to it. 
