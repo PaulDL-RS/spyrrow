@@ -13,6 +13,11 @@ classifiers = [
 authors = [ {name = "Paul Durand-Lupinski", email = "paul.durand-lupinski@reeverse-systems.com"}]
 license = { file = "LICENSE.txt" }
 dynamic = ["version"]
+
+[project.urls]
+documentation = "https://spyrrow.readthedocs.io/"
+source = "https://github.com/PaulDL-RS/spyrrow"
+
 [tool.maturin]
 features = ["pyo3/extension-module"]
 
