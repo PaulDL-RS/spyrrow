@@ -3,6 +3,8 @@
 `spyrrow` is a Python wrapper on the Rust project [`sparrow`](https://github.com/JeroenGar/sparrow).
 It enables to solve 2D [Strip packing problems](https://en.wikipedia.org/wiki/Strip_packing_problem). 
 
+The documentation is hosted [here](https://spyrrow.readthedocs.io/). 
+
 ## Installation
 
 Spyrrow is hosted on [PyPI](https://pypi.org/project/spyrrow/).
