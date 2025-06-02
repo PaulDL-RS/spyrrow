@@ -256,7 +256,7 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 [[package]]
 name = "jagua-rs"
 version = "0.5.1"
-source = "git+https://github.com/JeroenGar/jagua-rs.git?rev=06152d8654d8b9b0652c14ccd1f5d693b703b5de#06152d8654d8b9b0652c14ccd1f5d693b703b5de"
+source = "git+https://github.com/JeroenGar/jagua-rs.git?rev=3d36f849653e3e2273be9f6a7fd24da51ded585d#3d36f849653e3e2273be9f6a7fd24da51ded585d"
 dependencies = [
  "anyhow",
  "document-features",
@@ -680,7 +680,7 @@ dependencies = [
 [[package]]
 name = "sparrow"
 version = "0.1.0"
-source = "git+https://github.com/JeroenGar/sparrow.git?rev=cb456fe41443c6c3153141aa8e945fedba78e60b#cb456fe41443c6c3153141aa8e945fedba78e60b"
+source = "git+https://github.com/JeroenGar/sparrow.git?rev=3adafa222a260dc3f83a15a899541d2c51fae5d6#3adafa222a260dc3f83a15a899541d2c51fae5d6"
 dependencies = [
  "anyhow",
  "clap",
@@ -707,7 +707,7 @@ dependencies = [
 
 [[package]]
 name = "spyrrow"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "jagua-rs",
  "pyo3",
