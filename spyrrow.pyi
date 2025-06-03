@@ -48,7 +48,6 @@ class PlacedItem:
     """
 
     id: int
-    shape: list[Point]
     translation: Point
     rotation: float
 
