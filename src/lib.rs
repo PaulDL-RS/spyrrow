@@ -11,6 +11,7 @@ use sparrow::config::{
     CDE_CONFIG, COMPRESS_TIME_RATIO, EXPLORE_TIME_RATIO, MIN_ITEM_SEPARATION, SIMPL_TOLERANCE,
 };
 use sparrow::optimizer::{Terminator, optimize};
+use std::collections::HashSet;
 use std::fs;
 use std::time::Duration;
 
@@ -24,8 +25,8 @@ use std::time::Duration;
 /// to the allowed_orientations list.
 ///
 /// Args:
-///     id (int): The Item identifier for a given StripPackingInstance.
-///       Best autoincremented as the instance verifies that all ids are presents starting from 0.
+///     id (str): The Item identifier
+///       Needs to be unique accross all Items of a StripPackingInstance
 ///     shape (list[tuple[float,float]]): An ordered list of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this list of points.
 ///       The origin point can be included twice as the finishing point. If not, [last point, first point] is infered to be the last straight line of the shape.
 ///     demand (int): The quantity of identical Items to be placed inside the strip. Should be positive.
@@ -33,7 +34,7 @@ use std::time::Duration;
 ///       The algorithmn is only very weakly sensible to the length of the list given.
 ///
 struct ItemPy {
-    id: u64,
+    id: String,
     demand: u64,
     allowed_orientations: Option<Vec<f32>>,
     shape: Vec<(f32, f32)>,
@@ -42,7 +43,12 @@ struct ItemPy {
 #[pymethods]
 impl ItemPy {
     #[new]
-    fn new(id: u64, shape: Vec<(f32, f32)>, demand: u64, allowed_orientations: Vec<f32>) -> Self {
+    fn new(
+        id: String,
+        shape: Vec<(f32, f32)>,
+        demand: u64,
+        allowed_orientations: Vec<f32>,
+    ) -> Self {
         ItemPy {
             id,
             demand,
@@ -78,34 +84,19 @@ impl ItemPy {
     }
 }
 
-impl From<ItemPy> for ExtItem {
-    fn from(value: ItemPy) -> Self {
-        let polygon = ExtSPolygon(value.shape);
-        let shape = ExtShape::SimplePolygon(polygon);
-        let base = BaseItem {
-            id: value.id,
-            allowed_orientations: value.allowed_orientations,
-            shape,
-            min_quality: None,
-        };
-        ExtItem {
-            base,
-            demand: value.demand,
-        }
-    }
-}
-
 #[pyclass(name = "PlacedItem", get_all)]
 #[derive(Clone, Debug)]
 /// An object representing where a copy of an Item was placed inside the strip.
 ///
 /// Attributes:
-///     id (int): The Item identifier for a given StripPackingInstance.
-///     translation (tuple[float,float]): the translation vector in the X-Y axis
-///     rotation (float): The roation angle in degrees, assuming that the original Item was defined with 0° as its rotation angle.
+///     id (str): The Item identifier referencing the items of the StripPackingInstance
+///     rotation (float): The rotation angle in degrees, assuming that the original Item was defined with 0° as its rotation angle.
+///       Use the origin (0.0,0.0) as the rotation point.
+///     translation (tuple[float,float]): the translation vector in the X-Y axis. To apply after the rotation
+///       
 ///
 struct PlacedItemPy {
-    pub id: u64,
+    pub id: String,
     pub translation: (f32, f32),
     pub rotation: f32,
 }
@@ -127,6 +118,11 @@ struct StripPackingSolutionPy {
     pub density: f32,
 }
 
+fn all_unique(strings: &[&str]) -> bool {
+    let mut seen = HashSet::new();
+    strings.iter().all(|s| seen.insert(*s))
+}
+
 #[pyclass(name = "StripPackingInstance", get_all, set_all)]
 #[derive(Clone, Serialize)]
 /// An Instance of a Strip Packing Problem.
@@ -136,7 +132,6 @@ struct StripPackingSolutionPy {
 ///       An empty string '' can be used, if the user doesn't have a use for this name.
 ///     strip_height (float): the fixed height of the strip. The unit should be compatible with the Item
 ///     items (list[Item]): The Items which defines the instances. All Items should be defined with the same scale ( same length unit).
-///       Items ids should be an increasing series starting at 0 until len(items)-1.
 ///
 ///  Raises:
 ///     ValueError
@@ -149,7 +144,26 @@ struct StripPackingInstancePy {
 
 impl From<StripPackingInstancePy> for ExtSPInstance {
     fn from(value: StripPackingInstancePy) -> Self {
-        let items = value.items.into_iter().map(|v| v.into()).collect();
+        let items = value
+            .items
+            .into_iter()
+            .enumerate()
+            .map(|(idx, v)| {
+                let polygon = ExtSPolygon(v.shape);
+                let shape = ExtShape::SimplePolygon(polygon);
+                let base = BaseItem {
+                    id: idx as u64,
+                    allowed_orientations: v.allowed_orientations,
+                    shape,
+                    min_quality: None,
+                };
+                ExtItem {
+                    base,
+                    demand: v.demand,
+                    //         }
+                }
+            })
+            .collect();
         ExtSPInstance {
             name: value.name,
             strip_height: value.strip_height,
@@ -162,14 +176,9 @@ impl From<StripPackingInstancePy> for ExtSPInstance {
 impl StripPackingInstancePy {
     #[new]
     fn new(name: String, strip_height: f32, items: Vec<ItemPy>) -> PyResult<Self> {
-        let mut item_ids: Vec<u64> = items.iter().map(|i| i.id).collect();
-        item_ids.sort();
-        let expected_ids: Vec<u64> = (0..items.len()).map(|idx| idx as u64).collect();
-        if item_ids != expected_ids {
-            let error_string = format!(
-                "The item ids are not ordered from 0 to the Items length -1: {:#?}",
-                item_ids
-            );
+        let item_ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+        if !all_unique(&item_ids) {
+            let error_string = format!("The item ids are not uniques: {:#?}", item_ids);
             return Err(PyValueError::new_err(error_string));
         }
         Ok(StripPackingInstancePy {
@@ -238,8 +247,8 @@ impl StripPackingInstancePy {
                 .placed_items
                 .into_iter()
                 .map(|jpi| PlacedItemPy {
-                    id: jpi.item_id,
-                    rotation: jpi.transformation.rotation,
+                    id: self.items[jpi.item_id as usize].id.clone(),
+                    rotation: jpi.transformation.rotation.to_degrees(), // Until sparrow exports to degrees instead of radians
                     translation: jpi.transformation.translation,
                 })
                 .collect();

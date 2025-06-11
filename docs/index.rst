@@ -36,10 +36,10 @@ Examples
    import spyrrow
 
    rectangle1 = spyrrow.Item(
-         0, [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0]
+         "rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0]
       )
    triangle1 = spyrrow.Item(
-         1,
+         "triangle",
          [(0, 0), (1, 0), (1, 1), (0, 0)],
          demand=6,
          allowed_orientations=[0, 90, 180, -90],

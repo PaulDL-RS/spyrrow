@@ -3,14 +3,14 @@ from typing import TypeAlias
 Point: TypeAlias = tuple[float, float]
 
 class Item:
-    id: int
+    id: str
     demand: int
     shape: list[Point]
     allowed_orientations: list[float]
 
     def __init__(
         self,
-        id: int,
+        id: str,
         shape: list[Point],
         demand: int,
         allowed_orientations: list[float],
@@ -24,8 +24,8 @@ class Item:
         to the allowed_orientations list.
 
         Args:
-            id: The Item identifier for a given StripPackingInstance.
-              Best autoincremented as the instance verifies that all ids are presents starting from 0.
+            id (str): The Item identifier
+              Needs to be unique accross all Items of a StripPackingInstance
             shape: An ordered list of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this list of points.
               The origin point can be included twice as the finishing point. If not, [last point, first point] is infered to be the last straight line of the shape.
             demand: The quantity of identical Items to be placed inside the strip. Should be positive.
@@ -42,12 +42,13 @@ class PlacedItem:
     An object representing where a copy of an Item was placed inside the strip.
 
     Attributes:
-        id (int): The Item identifier for a given StripPackingInstance.
-        translation (tuple[float,float]): the translation vector in the X-Y axis
-        rotation (float): The roation angle in degrees, assuming that the original Item was defined with 0° as its rotation angle.
+        id (str): The Item identifier referencing the items of the StripPackingInstance
+        rotation (float): The rotation angle in degrees, assuming that the original Item was defined with 0° as its rotation angle.
+          Use the origin (0.0,0.0) as the rotation point.
+        translation (tuple[float,float]): the translation vector in the X-Y axis. To apply after the rotation
     """
 
-    id: int
+    id: str
     translation: Point
     rotation: float
 
@@ -81,8 +82,6 @@ class StripPackingInstance:
               An empty string '' can be used, if the user doesn't have a use for this name.
             strip_height (float): the fixed height of the strip. The unit should be compatible with the Item
             items (list[Item]): The Items which defines the instances. All Items should be defined with the same scale ( same length unit).
-              Items ids should be an increasing series starting at 0 until len(items)-1.
-
          Raises:
             ValueError
         """
