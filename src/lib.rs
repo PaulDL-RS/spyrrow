@@ -21,8 +21,6 @@ use std::time::Duration;
 ///
 /// Spyrrow doesn't support hole(s) inside the shape as of yet. Therefore no Item can be nested inside another.
 ///
-/// Continous rotation is not supported as of yet. A workaround  is to specify any integer degrees between 0 and 360
-/// to the allowed_orientations list.
 ///
 /// Args:
 ///     id (str): The Item identifier
@@ -30,7 +28,9 @@ use std::time::Duration;
 ///     shape (list[tuple[float,float]]): An ordered list of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this list of points.
 ///       The origin point can be included twice as the finishing point. If not, [last point, first point] is infered to be the last straight line of the shape.
 ///     demand (int): The quantity of identical Items to be placed inside the strip. Should be positive.
-///     allowed_orientations (list[float]): List of angles in degrees allowed. An empty list is equivalent to [0.].
+///     allowed_orientations (list[float]|None): List of angles in degrees allowed.
+///       An empty list is equivalent to [0.].
+///       A None value means that the item is free to rotate
 ///       The algorithmn is only very weakly sensible to the length of the list given.
 ///
 struct ItemPy {
@@ -47,12 +47,12 @@ impl ItemPy {
         id: String,
         shape: Vec<(f32, f32)>,
         demand: u64,
-        allowed_orientations: Vec<f32>,
+        allowed_orientations: Option<Vec<f32>>,
     ) -> Self {
         ItemPy {
             id,
             demand,
-            allowed_orientations: Some(allowed_orientations),
+            allowed_orientations,
             shape,
         }
     }
@@ -160,7 +160,6 @@ impl From<StripPackingInstancePy> for ExtSPInstance {
                 ExtItem {
                     base,
                     demand: v.demand,
-                    //         }
                 }
             })
             .collect();

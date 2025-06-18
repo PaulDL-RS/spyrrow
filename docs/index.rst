@@ -55,3 +55,16 @@ Examples
       print(pi.rotation)
       print(pi.translation)
       print("\n")
+
+In order to express that an Item can rotate freely, its `allowed_orientations` attributes should be set to `None`.
+
+.. code-block:: python
+
+   import spyrrow
+
+   triangle1 = spyrrow.Item(
+         "triangle",
+         [(0, 0), (1, 0), (1, 1), (0, 0)],
+         demand=6,
+         allowed_orientations=None,
+      )

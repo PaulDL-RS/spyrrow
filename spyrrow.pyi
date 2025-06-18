@@ -13,15 +13,12 @@ class Item:
         id: str,
         shape: list[Point],
         demand: int,
-        allowed_orientations: list[float],
+        allowed_orientations: list[float] | None,
     ):
         """
         An Item represents any closed 2D shape by its outer boundary.
 
         Spyrrow doesn't support hole(s) inside the shape as of yet. Therefore no Item can be nested inside another.
-
-        Continous rotation is not supported as of yet. A workaround  is to specify any integer degrees between 0 and 360
-        to the allowed_orientations list.
 
         Args:
             id (str): The Item identifier
@@ -29,13 +26,15 @@ class Item:
             shape: An ordered list of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this list of points.
               The origin point can be included twice as the finishing point. If not, [last point, first point] is infered to be the last straight line of the shape.
             demand: The quantity of identical Items to be placed inside the strip. Should be positive.
-            allowed_orientations: List of angles in degrees allowed. An empty list is equivalent to [0.].
+            allowed_orientations (list[float]|None): List of angles in degrees allowed.
+              An empty list is equivalent to [0.].
+              A None value means that the item is free to rotate
               The algorithmn is only very weakly sensible to the length of the list given.
 
         """
-    
-    def to_json_str(self)->str:
-        """ Return a string of the JSON representation of the object"""
+
+    def to_json_str(self) -> str:
+        """Return a string of the JSON representation of the object"""
 
 class PlacedItem:
     """
@@ -85,9 +84,8 @@ class StripPackingInstance:
          Raises:
             ValueError
         """
-    def to_json_str(self)->str:
-        """ Return a string of the JSON representation of the object"""
-
+    def to_json_str(self) -> str:
+        """Return a string of the JSON representation of the object"""
 
     def solve(self, computation_time: int = 600) -> StripPackingSolution:
         """
