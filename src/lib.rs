@@ -1,18 +1,20 @@
 use jagua_rs::io::ext_repr::{ExtItem as BaseItem, ExtSPolygon, ExtShape};
 use jagua_rs::io::import::Importer;
 use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance};
+use num_cpus;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rand::SeedableRng;
 use rand::prelude::SmallRng;
 use serde::Serialize;
 use sparrow::EPOCH;
-use sparrow::config::{
-    CDE_CONFIG, COMPRESS_TIME_RATIO, EXPLORE_TIME_RATIO, MIN_ITEM_SEPARATION, SIMPL_TOLERANCE,
-};
-use sparrow::optimizer::{Terminator, optimize};
+use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
+use sparrow::consts::{DEFAULT_FAIL_DECAY_RATIO_CMPR, DEFAULT_MAX_CONSEQ_FAILS_EXPL};
+use sparrow::optimizer::optimize;
+use sparrow::util::listener::DummySolListener;
+use sparrow::util::terminator::BasicTerminator;
 use std::collections::HashSet;
-use std::fs;
+
 use std::time::Duration;
 
 #[pyclass(name = "Item", get_all, set_all)]
@@ -123,6 +125,100 @@ fn all_unique(strings: &[&str]) -> bool {
     strings.iter().all(|s| seen.insert(*s))
 }
 
+#[pyclass(name = "StripPackingConfig", get_all, set_all)]
+#[derive(Clone, Serialize)]
+/// Initializes a configuration object for the strip packing algorithm.
+///
+/// Either `total_computation_time`, or both `exploration_time` and
+/// `compression_time`, must be provided. Providing all three or only
+///  one of the latter two raises an error.
+///
+///  If `total_computation_time` is provided, 80% of it is allocated to
+///  exploration and 20% to compression.
+///
+///  If `seed` is not provided, a random seed will be generated.
+///
+///  Args:
+///      early_termination (bool, optional): Whether to allow early termination of the algorithm. Defaults to True.
+///      quadtree_depth (int, optional): Maximum depth of the quadtree used by the collision detection engine jagua-rs.
+///        Must be positive, common values are 3,4,5. Defaults to 4.
+///      min_items_separation (Optional[float], optional): Minimum required distance between packed items. Defaults to None.
+///      total_computation_time (Optional[int], optional): Total time budget in seconds.
+///        Used if `exploration_time` and `compression_time` are not provided. Defaults to 600.
+///      exploration_time (Optional[int], optional): Time in seconds allocated to exploration. Defaults to None.
+///      compression_time (Optional[int], optional): Time in seconds allocated to compression. Defaults to None.
+///      num_workers (Optional[int], optional): Number of threads used by the collision detection engine during exploration.
+///         When set to None, detect the number of logical CPU cores on the execution plateform. Defaults to None.
+///      seed (Optional[int], optional): Optional random seed to give reproductibility. If None, a random seed is generated. Defaults to None.
+///
+///  Raises:
+///     ValueError: If the combination of time arguments is invalid.
+struct StripPackingConfigPy {
+    early_termination: bool,
+    seed: u64,
+    exploration_time: Duration,
+    compression_time: Duration,
+    quadtree_depth: u8,
+    min_items_separation: Option<f32>,
+    num_wokers: usize,
+}
+
+#[pymethods]
+impl StripPackingConfigPy {
+    #[new]
+    #[pyo3(signature = (early_termination=true,quadtree_depth=4,min_items_separation=None,total_computation_time=600,exploration_time=None,compression_time=None,num_wokers=None,seed=None))]
+    fn new(
+        early_termination: bool,
+        quadtree_depth: u8,
+        min_items_separation: Option<f32>,
+        total_computation_time: Option<u64>,
+        exploration_time: Option<u64>,
+        compression_time: Option<u64>,
+        num_wokers: Option<usize>,
+        seed: Option<u64>,
+    ) -> PyResult<Self> {
+        let (exploration_time, compression_time) = match (
+            total_computation_time,
+            exploration_time,
+            compression_time,
+        ) {
+            (None, Some(exploration_time), Some(compression_time)) => (
+                Duration::from_secs(exploration_time),
+                Duration::from_secs(compression_time),
+            ),
+            (Some(total_computation_time), None, None) => (
+                Duration::from_secs(total_computation_time).mul_f32(0.8),
+                Duration::from_secs(total_computation_time).mul_f32(0.2),
+            ),
+            _ => {
+                return Err(PyValueError::new_err(
+                    "Either total_computation_time or both exploration_time and compression_time should be provided, not all 3 or some other combination",
+                ));
+            }
+        };
+        let seed = seed.unwrap_or_else(rand::random);
+        let num_wokers = num_wokers.unwrap_or_else(num_cpus::get);
+        Ok(Self {
+            early_termination,
+            seed,
+            exploration_time,
+            compression_time,
+            quadtree_depth,
+            num_wokers,
+            min_items_separation,
+        })
+    }
+
+    /// Return a string of the JSON representation of the object
+    ///
+    /// Returns:
+    ///     str
+    ///
+    fn to_json_str(&self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}
+
 #[pyclass(name = "StripPackingInstance", get_all, set_all)]
 #[derive(Clone, Serialize)]
 /// An Instance of a Strip Packing Problem.
@@ -177,7 +273,7 @@ impl StripPackingInstancePy {
     fn new(name: String, strip_height: f32, items: Vec<ItemPy>) -> PyResult<Self> {
         let item_ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
         if !all_unique(&item_ids) {
-            let error_string = format!("The item ids are not uniques: {:#?}", item_ids);
+            let error_string = format!("The item ids are not uniques: {item_ids:#?}");
             return Err(PyValueError::new_err(error_string));
         }
         Ok(StripPackingInstancePy {
@@ -196,7 +292,6 @@ impl StripPackingInstancePy {
         serde_json::to_string(&self).unwrap()
     }
 
-    #[pyo3(signature = (computation_time=600))]
     /// The method to solve the instance.
     ///
     /// Args:
@@ -206,37 +301,42 @@ impl StripPackingInstancePy {
     /// Returns:
     ///     a StripPackingSolution
     ///
-    fn solve(&self, computation_time: u64, py: Python) -> StripPackingSolutionPy {
-        // Temporary output dir for intermediary solution
-
-        // let tmp = TempDir::new().expect("could not create output directory");
-        let tmp_str = String::from("tmp");
-        fs::create_dir_all(&tmp_str).expect("Temporary foulder should be created");
-
-        // Reproductibility
-        let seed = rand::random();
-        let rng = SmallRng::seed_from_u64(seed);
-
-        // Execution Time
-        let (explore_dur, compress_dur) = (
-            Duration::from_secs(computation_time).mul_f32(EXPLORE_TIME_RATIO),
-            Duration::from_secs(computation_time).mul_f32(COMPRESS_TIME_RATIO),
-        );
+    fn solve(&self, config_py: StripPackingConfigPy, py: Python) -> StripPackingSolutionPy {
+        let mut config = DEFAULT_SPARROW_CONFIG;
+        config.rng_seed = Some(config_py.seed as usize);
+        config.expl_cfg.time_limit = config_py.exploration_time;
+        config.expl_cfg.separator_config.n_workers = config_py.num_wokers;
+        config.cmpr_cfg.time_limit = config_py.compression_time;
+        let rng = SmallRng::seed_from_u64(config_py.seed);
+        if config_py.early_termination {
+            config.expl_cfg.max_conseq_failed_attempts = Some(DEFAULT_MAX_CONSEQ_FAILS_EXPL);
+            config.cmpr_cfg.shrink_decay =
+                ShrinkDecayStrategy::FailureBased(DEFAULT_FAIL_DECAY_RATIO_CMPR);
+        }
+        config.cde_config.quadtree_depth = config_py.quadtree_depth;
+        config.min_item_separation = config_py.min_items_separation;
 
         let ext_instance = self.clone().into();
-        let importer = Importer::new(CDE_CONFIG, SIMPL_TOLERANCE, MIN_ITEM_SEPARATION);
+        let importer = Importer::new(
+            config.cde_config,
+            config.poly_simpl_tolerance,
+            config.min_item_separation,
+        );
         let instance = jagua_rs::probs::spp::io::import(&importer, &ext_instance)
             .expect("Expected a Strip Packing Problem Instance");
+        let mut terminator = BasicTerminator::new();
+
+        // The Python code is not concerned with intermediary solution for now
+        let mut dummy_exporter = DummySolListener {};
 
         py.allow_threads(move || {
-            let terminator = Terminator::new_without_ctrlc();
             let solution = optimize(
                 instance.clone(),
                 rng,
-                tmp_str.clone(),
-                terminator,
-                explore_dur,
-                compress_dur,
+                &mut dummy_exporter,
+                &mut terminator,
+                &config.expl_cfg,
+                &config.cmpr_cfg,
             );
 
             let solution = jagua_rs::probs::spp::io::export(&instance, &solution, *EPOCH);
@@ -251,7 +351,7 @@ impl StripPackingInstancePy {
                     translation: jpi.transformation.translation,
                 })
                 .collect();
-            fs::remove_dir_all(&tmp_str).expect("Should be able to remove tmp dir");
+
             StripPackingSolutionPy {
                 width: solution.strip_width,
                 density: solution.density,
@@ -267,6 +367,7 @@ fn spyrrow(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ItemPy>()?;
     m.add_class::<PlacedItemPy>()?;
     m.add_class::<StripPackingInstancePy>()?;
+    m.add_class::<StripPackingConfigPy>()?;
     m.add_class::<StripPackingSolutionPy>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())

@@ -7,6 +7,8 @@ Public API of `spyrrow`
 
 .. autoclass:: spyrrow::StripPackingInstance
 
+.. autoclass:: spyrrow::StripPackingConfig
+
 .. autoclass:: spyrrow::StripPackingSolution
 
 .. autoclass:: spyrrow::PlacedItem

@@ -1,4 +1,5 @@
-from typing import TypeAlias
+from typing import TypeAlias, Optional
+from datetime import timedelta
 
 Point: TypeAlias = tuple[float, float]
 
@@ -67,6 +68,61 @@ class StripPackingSolution:
     density: float
     placed_items: list[PlacedItem]
 
+class StripPackingConfig:
+    early_termination: bool
+    seed: int
+    exploration_time: timedelta
+    compression_time: timedelta
+    quadtree_depth: int
+    num_wokers:Optional[int]
+    min_items_separation: Optional[float]
+
+    def __init__(
+        self,
+        early_termination: bool = True,
+        quadtree_depth: int = 4,
+        min_items_separation: Optional[float] = None,
+        total_computation_time: Optional[int] = 600,
+        exploration_time: Optional[int] = None,
+        compression_time: Optional[int] = None,
+        num_wokers:Optional[int]= None,
+        seed: Optional[int] = None,
+    ) -> None:
+        """Initializes a configuration object for the strip packing algorithm.
+
+        Either `total_computation_time`, or both `exploration_time` and
+        `compression_time`, must be provided. Providing all three or only
+        one of the latter two raises an error.
+
+        If `total_computation_time` is provided, 80% of it is allocated to
+        exploration and 20% to compression.
+
+        If `seed` is not provided, a random seed will be generated.
+
+        Args:
+            early_termination (bool, optional): Whether to allow early termination of the algorithm. Defaults to True.
+            quadtree_depth (int, optional): Maximum depth of the quadtree used by the collision detection engine jagua-rs. 
+              Must be positive, common values are 3,4,5. Defaults to 4.
+            min_items_separation (Optional[float], optional): Minimum required distance between packed items. Defaults to None.
+            total_computation_time (Optional[int], optional): Total time budget in seconds. 
+              Used if `exploration_time` and `compression_time` are not provided. Defaults to 600.
+            exploration_time (Optional[int], optional): Time in seconds allocated to exploration. Defaults to None.
+            compression_time (Optional[int], optional): Time in seconds allocated to compression. Defaults to None.
+            num_workers (Optional[int], optional): Number of threads used by the collision detection engine during exploration.
+              When set to None, detect the number of logical CPU cores on the execution plateform. Defaults to None.
+            seed (Optional[int], optional): Optional random seed to give reproductibility. If None, a random seed is generated. Defaults to None.
+
+        Raises:
+            ValueError: If the combination of time arguments is invalid.
+        """
+
+    def to_json_str(self)->str:
+        """Return a string of the JSON representation of the object
+
+        Returns:
+            str
+        """
+
 class StripPackingInstance:
     name: str
     strip_height: float
@@ -87,13 +143,12 @@ class StripPackingInstance:
     def to_json_str(self) -> str:
         """Return a string of the JSON representation of the object"""
 
-    def solve(self, computation_time: int = 600) -> StripPackingSolution:
+    def solve(self, config: StripPackingConfig) -> StripPackingSolution:
         """
         The method to solve the instance.
 
         Args:
-            computation_time (int): The total computation time in seconds used to find a solution.
-              The algorithm won't exit early.Waht you input is what you get. Default is 600 s = 10 minutes.
+            config (StripPackingConfig): the config object to precise behavior of how to solve the strip packing instance.
 
         Returns:
             a StripPackingSolution

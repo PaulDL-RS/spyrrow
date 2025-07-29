@@ -1,0 +1,4 @@
+
+# Configuration object in Python can have a lot of parameters thanks to keyword arguments
+# Creating intermediary types to reduce parameter number increases complexity for the Python user
+too-many-arguments-threshold=8 

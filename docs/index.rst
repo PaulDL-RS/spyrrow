@@ -46,7 +46,8 @@ Examples
       )
 
    instance = spyrrow.StripPackingInstance("test", strip_height=2.001, items=[rectangle1,triangle1])
-   sol:spyrrow.StripPackingSolution = instance.solve(30)
+   config = spyrrow.StripPackingConfig(early_termination=False,total_computation_time=60,num_wokers=3,seed=0)
+   sol = instance.solve(config)
    print(sol.width)
    print(sol.density)
    print("\n")
