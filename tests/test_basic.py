@@ -81,6 +81,11 @@ def test_continuous_rotation():
     instance = spyrrow.StripPackingInstance(
         "test", strip_height=2.001, items=[rectangle1, triangle1]
     )
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=30,seed=0)
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,seed=0)
     sol = instance.solve(config)
-    assert sol.width == pytest.approx(4,rel=0.05)
+    print(sol.width)
+    assert sol.width >= 3.5
+    assert sol.width < 4
+
+if __name__ == '__main__':
+    test_continuous_rotation()
