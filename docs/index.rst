@@ -36,20 +36,23 @@ Examples
    import spyrrow
 
    rectangle1 = spyrrow.Item(
-         "rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0]
-      )
+      "rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0]
+   )
    triangle1 = spyrrow.Item(
-         "triangle",
-         [(0, 0), (1, 0), (1, 1), (0, 0)],
-         demand=6,
-         allowed_orientations=[0, 90, 180, -90],
-      )
+      "triangle",
+      [(0, 0), (1, 0), (1, 1), (0, 0)],
+      demand=6,
+      allowed_orientations=[0, 90, 180, -90],
+   )
 
-   instance = spyrrow.StripPackingInstance("test", strip_height=2.001, items=[rectangle1,triangle1])
+   instance = spyrrow.StripPackingInstance(
+      "test", strip_height=2.001, items=[rectangle1, triangle1]
+   )
    config = spyrrow.StripPackingConfig(early_termination=False,total_computation_time=60,num_wokers=3,seed=0)
    sol = instance.solve(config)
-   print(sol.width)
+   print(sol.width) # 4.0 +/- 5%
    print(sol.density)
+
    print("\n")
    for pi in sol.placed_items:
       print(pi.id)
@@ -69,3 +72,10 @@ In order to express that an Item can rotate freely, its `allowed_orientations` a
          demand=6,
          allowed_orientations=None,
       )
+
+
+One can enable early_termination, by setting its value to true inside the configuration object.
+It will use internal mechanism to detect when the solution can not be improved by the current algorithm. 
+
+Further configuration options are available through the configuration object. 
+You may refer to `sparrow <https://github.com/JeroenGar/sparrow>`_ for more precise explanations.

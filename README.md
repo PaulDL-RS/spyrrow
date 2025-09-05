@@ -21,18 +21,21 @@ pip install spyrrow
 import spyrrow
 
 rectangle1 = spyrrow.Item(
-        "rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0]
-    )
+    "rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0]
+)
 triangle1 = spyrrow.Item(
-         "triangle",
-        [(0, 0), (1, 0), (1, 1), (0, 0)],
-        demand=6,
-        allowed_orientations=[0, 90, 180, -90],
-    )
+    "triangle",
+    [(0, 0), (1, 0), (1, 1), (0, 0)],
+    demand=6,
+    allowed_orientations=[0, 90, 180, -90],
+)
 
-instance = spyrrow.StripPackingInstance("test", strip_height=2.001, items=[rectangle1,triangle1])
-sol:spyrrow.StripPackingSolution = instance.solve(30)
-print(sol.width)
+instance = spyrrow.StripPackingInstance(
+    "test", strip_height=2.001, items=[rectangle1, triangle1]
+)
+config = spyrrow.StripPackingConfig(early_termination=False,total_computation_time=60,num_wokers=3,seed=0)
+sol = instance.solve(config)
+print(sol.width) # 4.0 +/- 5%
 print(sol.density)
 print("\n")
 for pi in sol.placed_items:
