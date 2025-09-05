@@ -93,12 +93,11 @@ class StripPackingConfig:
         Either `total_computation_time`, or both `exploration_time` and
         `compression_time`, must be provided. Providing all three or only
         one of the latter two raises an error.
-
         If `total_computation_time` is provided, 80% of it is allocated to
         exploration and 20% to compression.
-
         If `seed` is not provided, a random seed will be generated.
 
+        
         Args:
             early_termination (bool, optional): Whether to allow early termination of the algorithm. Defaults to True.
             quadtree_depth (int, optional): Maximum depth of the quadtree used by the collision detection engine jagua-rs. 
@@ -148,7 +147,7 @@ class StripPackingInstance:
         The method to solve the instance.
 
         Args:
-            config (StripPackingConfig): the config object to precise behavior of how to solve the strip packing instance.
+            config (StripPackingConfig): The configuration object to control how the instance is solved.
 
         Returns:
             a StripPackingSolution

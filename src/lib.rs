@@ -130,29 +130,28 @@ fn all_unique(strings: &[&str]) -> bool {
 /// Initializes a configuration object for the strip packing algorithm.
 ///
 /// Either `total_computation_time`, or both `exploration_time` and
-/// `compression_time`, must be provided. Providing all three or only
-///  one of the latter two raises an error.
+///   `compression_time`, must be provided. Providing all three or only one of the latter two raises an error.
+/// If `total_computation_time` is provided, 80% of it is allocated to
+///   exploration and 20% to compression.
+/// If `seed` is not provided, a random seed will be generated.
 ///
-///  If `total_computation_time` is provided, 80% of it is allocated to
-///  exploration and 20% to compression.
 ///
-///  If `seed` is not provided, a random seed will be generated.
+/// Args:
+///     early_termination (bool, optional): Whether to allow early termination of the algorithm. Defaults to True.
+///     quadtree_depth (int, optional): Maximum depth of the quadtree used by the collision detection engine jagua-rs.
+///       Must be positive, common values are 3,4,5. Defaults to 4.
+///     min_items_separation (Optional[float], optional): Minimum required distance between packed items. Defaults to None.
+///     total_computation_time (Optional[int], optional): Total time budget in seconds.
+///       Used if `exploration_time` and `compression_time` are not provided. Defaults to 600.
+///     exploration_time (Optional[int], optional): Time in seconds allocated to exploration. Defaults to None.
+///     compression_time (Optional[int], optional): Time in seconds allocated to compression. Defaults to None.
+///     num_workers (Optional[int], optional): Number of threads used by the collision detection engine during exploration.
+///       When set to None, detect the number of logical CPU cores on the execution plateform. Defaults to None.
+///     seed (Optional[int], optional): Optional random seed to give reproductibility. If None, a random seed is generated. Defaults to None.
 ///
-///  Args:
-///      early_termination (bool, optional): Whether to allow early termination of the algorithm. Defaults to True.
-///      quadtree_depth (int, optional): Maximum depth of the quadtree used by the collision detection engine jagua-rs.
-///        Must be positive, common values are 3,4,5. Defaults to 4.
-///      min_items_separation (Optional[float], optional): Minimum required distance between packed items. Defaults to None.
-///      total_computation_time (Optional[int], optional): Total time budget in seconds.
-///        Used if `exploration_time` and `compression_time` are not provided. Defaults to 600.
-///      exploration_time (Optional[int], optional): Time in seconds allocated to exploration. Defaults to None.
-///      compression_time (Optional[int], optional): Time in seconds allocated to compression. Defaults to None.
-///      num_workers (Optional[int], optional): Number of threads used by the collision detection engine during exploration.
-///         When set to None, detect the number of logical CPU cores on the execution plateform. Defaults to None.
-///      seed (Optional[int], optional): Optional random seed to give reproductibility. If None, a random seed is generated. Defaults to None.
-///
-///  Raises:
+/// Raises:
 ///     ValueError: If the combination of time arguments is invalid.
+///
 struct StripPackingConfigPy {
     early_termination: bool,
     seed: u64,
@@ -295,32 +294,31 @@ impl StripPackingInstancePy {
     /// The method to solve the instance.
     ///
     /// Args:
-    ///     computation_time (int): The total computation time in seconds used to find a solution.
-    ///       The algorithm won't exit early.Waht you input is what you get. Default is 600 s = 10 minutes.
+    ///     config (StripPackingConfig): The configuration object to control how the instance is solved.
     ///
     /// Returns:
     ///     a StripPackingSolution
     ///
-    fn solve(&self, config_py: StripPackingConfigPy, py: Python) -> StripPackingSolutionPy {
-        let mut config = DEFAULT_SPARROW_CONFIG;
-        config.rng_seed = Some(config_py.seed as usize);
-        config.expl_cfg.time_limit = config_py.exploration_time;
-        config.expl_cfg.separator_config.n_workers = config_py.num_wokers;
-        config.cmpr_cfg.time_limit = config_py.compression_time;
-        let rng = SmallRng::seed_from_u64(config_py.seed);
-        if config_py.early_termination {
-            config.expl_cfg.max_conseq_failed_attempts = Some(DEFAULT_MAX_CONSEQ_FAILS_EXPL);
-            config.cmpr_cfg.shrink_decay =
+    fn solve(&self, config: StripPackingConfigPy, py: Python) -> StripPackingSolutionPy {
+        let mut rs_config = DEFAULT_SPARROW_CONFIG;
+        rs_config.rng_seed = Some(config.seed as usize);
+        rs_config.expl_cfg.time_limit = config.exploration_time;
+        rs_config.expl_cfg.separator_config.n_workers = config.num_wokers;
+        rs_config.cmpr_cfg.time_limit = config.compression_time;
+        let rng = SmallRng::seed_from_u64(config.seed);
+        if config.early_termination {
+            rs_config.expl_cfg.max_conseq_failed_attempts = Some(DEFAULT_MAX_CONSEQ_FAILS_EXPL);
+            rs_config.cmpr_cfg.shrink_decay =
                 ShrinkDecayStrategy::FailureBased(DEFAULT_FAIL_DECAY_RATIO_CMPR);
         }
-        config.cde_config.quadtree_depth = config_py.quadtree_depth;
-        config.min_item_separation = config_py.min_items_separation;
+        rs_config.cde_config.quadtree_depth = config.quadtree_depth;
+        rs_config.min_item_separation = config.min_items_separation;
 
         let ext_instance = self.clone().into();
         let importer = Importer::new(
-            config.cde_config,
-            config.poly_simpl_tolerance,
-            config.min_item_separation,
+            rs_config.cde_config,
+            rs_config.poly_simpl_tolerance,
+            rs_config.min_item_separation,
         );
         let instance = jagua_rs::probs::spp::io::import(&importer, &ext_instance)
             .expect("Expected a Strip Packing Problem Instance");
@@ -335,8 +333,8 @@ impl StripPackingInstancePy {
                 rng,
                 &mut dummy_exporter,
                 &mut terminator,
-                &config.expl_cfg,
-                &config.cmpr_cfg,
+                &rs_config.expl_cfg,
+                &rs_config.cmpr_cfg,
             );
 
             let solution = jagua_rs::probs::spp::io::export(&instance, &solution, *EPOCH);
