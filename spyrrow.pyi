@@ -90,11 +90,9 @@ class StripPackingConfig:
     ) -> None:
         """Initializes a configuration object for the strip packing algorithm.
 
-        Either `total_computation_time`, or both `exploration_time` and
-        `compression_time`, must be provided. Providing all three or only
-        one of the latter two raises an error.
-        If `total_computation_time` is provided, 80% of it is allocated to
-        exploration and 20% to compression.
+        Either `total_computation_time`, or both `exploration_time` and `compression_time`, must be provided. 
+          Providing all three or only one of the latter two raises an error.
+        If `total_computation_time` is provided, 80% of it is allocated to exploration and 20% to compression.
         If `seed` is not provided, a random seed will be generated.
 
         
@@ -113,6 +111,7 @@ class StripPackingConfig:
 
         Raises:
             ValueError: If the combination of time arguments is invalid.
+
         """
 
     def to_json_str(self)->str:

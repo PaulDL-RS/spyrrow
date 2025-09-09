@@ -1,7 +1,6 @@
 use jagua_rs::io::ext_repr::{ExtItem as BaseItem, ExtSPolygon, ExtShape};
 use jagua_rs::io::import::Importer;
 use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance};
-use num_cpus;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rand::SeedableRng;
@@ -131,8 +130,7 @@ fn all_unique(strings: &[&str]) -> bool {
 ///
 /// Either `total_computation_time`, or both `exploration_time` and
 ///   `compression_time`, must be provided. Providing all three or only one of the latter two raises an error.
-/// If `total_computation_time` is provided, 80% of it is allocated to
-///   exploration and 20% to compression.
+/// If `total_computation_time` is provided, 80% of it is allocated to exploration and 20% to compression.
 /// If `seed` is not provided, a random seed will be generated.
 ///
 ///
