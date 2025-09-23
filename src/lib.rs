@@ -75,6 +75,10 @@ impl ItemPy {
         }
     }
 
+    fn __deepcopy__(&self, _memo: PyObject) -> Self {
+        self.clone()
+    }
+
     /// Return a string of the JSON representation of the object
     ///
     /// Returns:
@@ -102,6 +106,14 @@ struct PlacedItemPy {
     pub rotation: f32,
 }
 
+#[pymethods]
+impl PlacedItemPy {
+
+    fn __deepcopy__(&self, _memo: PyObject) -> Self {
+        self.clone()
+    }
+}
+
 #[pyclass(name = "StripPackingSolution", get_all)]
 #[derive(Clone, Debug)]
 /// An object representing the solution to a given StripPackingInstance.
@@ -117,6 +129,14 @@ struct StripPackingSolutionPy {
     pub width: f32,
     pub placed_items: Vec<PlacedItemPy>,
     pub density: f32,
+}
+
+#[pymethods]
+impl StripPackingSolutionPy {
+
+    fn __deepcopy__(&self, _memo: PyObject) -> Self {
+        self.clone()
+    }
 }
 
 fn all_unique(strings: &[&str]) -> bool {
@@ -206,6 +226,10 @@ impl StripPackingConfigPy {
         })
     }
 
+    fn __deepcopy__(&self, _memo: PyObject) -> Self {
+        self.clone()
+    }
+
     /// Return a string of the JSON representation of the object
     ///
     /// Returns:
@@ -287,6 +311,10 @@ impl StripPackingInstancePy {
     ///
     fn to_json_str(&self) -> String {
         serde_json::to_string(&self).unwrap()
+    }
+
+    fn __deepcopy__(&self, _memo: PyObject) -> Self {
+        self.clone()
     }
 
     /// The method to solve the instance.
