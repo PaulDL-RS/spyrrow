@@ -1,0 +1,5 @@
+# Treat all Rust files as vendored (excluded from language stats)
+*.rs linguist-vendored
+
+# Ensure Python files are counted
+*.py linguist-detectable=true
