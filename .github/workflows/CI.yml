@@ -62,7 +62,8 @@ jobs:
           source .venv/bin/activate
           pip install spyrrow --find-links dist --force-reinstall
           pip install pytest
-          pytest
+          pip install pytest-xdist[psutil]
+          pytest -n auto
       - name: pytest
         if: ${{ !startsWith(matrix.platform.target, 'x86') && matrix.platform.target != 'ppc64' }}
         uses: uraimo/run-on-arch-action@v2
@@ -73,11 +74,11 @@ jobs:
           install: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip
-            pip3 install -U pip pytest
+            pip3 install -U pip pytest pytest-xdist[psutil]
           run: |
             set -e
             pip3 install spyrrow --find-links dist --force-reinstall
-            pytest
+            pytest -n auto
 
   musllinux:
     runs-on: ${{ matrix.platform.runner }}
@@ -122,7 +123,8 @@ jobs:
             source .venv/bin/activate
             pip install spyrrow --no-index --find-links dist --force-reinstall
             pip install pytest
-            pytest
+            pip install pytest-xdist[psutil]
+            pytest -n auto
       - name: pytest
         if: ${{ !startsWith(matrix.platform.target, 'x86') }}
         uses: uraimo/run-on-arch-action@v2
@@ -137,8 +139,9 @@ jobs:
             python3 -m virtualenv .venv
             source .venv/bin/activate
             pip install pytest
+            pip install pytest-xdist[psutil]
             pip install spyrrow --find-links dist --force-reinstall
-            pytest
+            pytest -n auto
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
@@ -175,7 +178,8 @@ jobs:
           source .venv/Scripts/activate
           pip install spyrrow --find-links dist --force-reinstall
           pip install pytest
-          pytest
+          pip install pytest-xdist[psutil]
+          pytest -n auto
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
@@ -209,7 +213,8 @@ jobs:
           source .venv/bin/activate
           pip install spyrrow --find-links dist --force-reinstall
           pip install pytest
-          pytest
+          pip install pytest-xdist[psutil]
+          pytest -n auto
 
   sdist:
     runs-on: ubuntu-latest

@@ -113,7 +113,7 @@ def test_2_consecutive_calls():
     )
     config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,seed=0)
     sol = instance.solve(config)
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=30,seed=0)
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=60,seed=0)
     sol = instance.solve(config)
     assert sol.width == pytest.approx(4,rel=0.05)
 
