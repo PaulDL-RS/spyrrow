@@ -4,7 +4,7 @@ use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rand::SeedableRng;
-use rand::prelude::SmallRng;
+use rand_xoshiro::Xoshiro256PlusPlus;
 use serde::Serialize;
 use sparrow::EPOCH;
 use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
@@ -13,7 +13,7 @@ use sparrow::optimizer::optimize;
 use sparrow::util::listener::DummySolListener;
 use sparrow::util::terminator::BasicTerminator;
 use std::collections::HashSet;
-
+use std::num::NonZeroU64;
 use std::time::Duration;
 
 #[pyclass(name = "Item", get_all, set_all)]
@@ -28,7 +28,7 @@ use std::time::Duration;
 ///       Needs to be unique accross all Items of a StripPackingInstance
 ///     shape (list[tuple[float,float]]): An ordered list of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this list of points.
 ///       The origin point can be included twice as the finishing point. If not, [last point, first point] is infered to be the last straight line of the shape.
-///     demand (int): The quantity of identical Items to be placed inside the strip. Should be positive.
+///     demand (int): The quantity of identical Items to be placed inside the strip. Should be strictly positive.
 ///     allowed_orientations (list[float]|None): List of angles in degrees allowed.
 ///       An empty list is equivalent to [0.].
 ///       A None value means that the item is free to rotate
@@ -36,7 +36,7 @@ use std::time::Duration;
 ///
 struct ItemPy {
     id: String,
-    demand: u64,
+    demand: NonZeroU64,
     allowed_orientations: Option<Vec<f32>>,
     shape: Vec<(f32, f32)>,
 }
@@ -47,7 +47,7 @@ impl ItemPy {
     fn new(
         id: String,
         shape: Vec<(f32, f32)>,
-        demand: u64,
+        demand: NonZeroU64,
         allowed_orientations: Option<Vec<f32>>,
     ) -> Self {
         ItemPy {
@@ -276,7 +276,7 @@ impl From<StripPackingInstancePy> for ExtSPInstance {
                 };
                 ExtItem {
                     base,
-                    demand: v.demand,
+                    demand: v.demand.get(),
                 }
             })
             .collect();
@@ -326,12 +326,19 @@ impl StripPackingInstancePy {
     ///     a StripPackingSolution
     ///
     fn solve(&self, config: StripPackingConfigPy, py: Python) -> StripPackingSolutionPy {
+        if self.items.is_empty() {
+            return StripPackingSolutionPy {
+                width: 0.0,
+                density: 0.0,
+                placed_items:Vec::new(),
+            }
+        }
         let mut rs_config = DEFAULT_SPARROW_CONFIG;
         rs_config.rng_seed = Some(config.seed as usize);
         rs_config.expl_cfg.time_limit = config.exploration_time;
         rs_config.expl_cfg.separator_config.n_workers = config.num_wokers;
         rs_config.cmpr_cfg.time_limit = config.compression_time;
-        let rng = SmallRng::seed_from_u64(config.seed);
+        let rng =  Xoshiro256PlusPlus::seed_from_u64(config.seed);
         if config.early_termination {
             rs_config.expl_cfg.max_conseq_failed_attempts = Some(DEFAULT_MAX_CONSEQ_FAILS_EXPL);
             rs_config.cmpr_cfg.shrink_decay =
@@ -344,7 +351,7 @@ impl StripPackingInstancePy {
         let importer = Importer::new(
             rs_config.cde_config,
             rs_config.poly_simpl_tolerance,
-            rs_config.min_item_separation,
+            rs_config.min_item_separation,None
         );
         let instance = jagua_rs::probs::spp::io::import(&importer, &ext_instance)
             .expect("Expected a Strip Packing Problem Instance");

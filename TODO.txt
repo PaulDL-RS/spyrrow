@@ -1,0 +1,43 @@
+## Upstream changes to sparrow
+
+Add a proper ctr-c handler again
+
+
+Docs: for VSCode integration, I only managed to get hover information from the *.pyi stub file
+the __doc__ can read docstring written in Rust, and its probably the right way for Sphinx
+
+
+use test-profile for local developpment
+
+investiguate the compile options, nightly and SIMD and PyPa target architectures 
+target-cpu=native Rust flag is REALLY IMPORTANT
+
+- add presets for parameters as enums 
+
+
+## Mixed project Python/Rust
+possibility to add conversion from shapely in a shapely variant
+investiguate the possibility of maturin to handle extras
+
+add checks for item vs strip_heights
+
+Investiguate the performance penalty of the Python wrapper
+GitHub free Runners are consistents and don't produce much noise according to Jeroen
+Use the number of evaluation per minute too compare
+Need to cpature the logs, look at main to Rust logger integration
+
+Give to Jeroen a description of how sparrow is used, in order for him to devise which controls to expose to the end user 
+
+execution setting: 
+instance size, type, using feature from machine learning ? 
+
+
+
+No more than 3/4  workers, minimum of 3 or number of cpu cores avalaible
+
+define presets auto, normal , greedy, ... + add options for power users
+look at the paper to define the parameters needs to be exposed
+
+to do benchmark, I need to do 5 steps of exploration, fix the seed to a gvien value
+max_conseq_failed attempts
+

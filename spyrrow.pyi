@@ -26,7 +26,7 @@ class Item:
               Needs to be unique accross all Items of a StripPackingInstance
             shape: An ordered list of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this list of points.
               The origin point can be included twice as the finishing point. If not, [last point, first point] is infered to be the last straight line of the shape.
-            demand: The quantity of identical Items to be placed inside the strip. Should be positive.
+            demand: The quantity of identical Items to be placed inside the strip. Should be strictly positive.
             allowed_orientations (list[float]|None): List of angles in degrees allowed.
               An empty list is equivalent to [0.].
               A None value means that the item is free to rotate
