@@ -74,7 +74,7 @@ jobs:
           install: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip
-            pip3 install -U pip pytest pytest-xdist[psutil]
+            pip3 install -U pip pytest pytest-xdist
           run: |
             set -e
             pip3 install spyrrow --find-links dist --force-reinstall
