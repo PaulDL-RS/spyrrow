@@ -62,7 +62,7 @@ jobs:
           source .venv/bin/activate
           pip install spyrrow --find-links dist --force-reinstall
           pip install pytest
-          pip install pytest-xdist[psutil]
+          pip install pytest-xdist
           pytest -n auto
       - name: pytest
         if: ${{ !startsWith(matrix.platform.target, 'x86') && matrix.platform.target != 'ppc64' }}
@@ -123,7 +123,7 @@ jobs:
             source .venv/bin/activate
             pip install spyrrow --no-index --find-links dist --force-reinstall
             pip install pytest
-            pip install pytest-xdist[psutil]
+            pip install pytest-xdist
             pytest -n auto
       - name: pytest
         if: ${{ !startsWith(matrix.platform.target, 'x86') }}
