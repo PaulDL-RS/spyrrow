@@ -35,8 +35,10 @@ jobs:
             target: armv7
           - runner: ubuntu-22.04
             target: s390x
+            optional: true
           - runner: ubuntu-22.04
             target: ppc64le
+            optional: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
