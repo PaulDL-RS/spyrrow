@@ -139,7 +139,7 @@ jobs:
             python3 -m virtualenv .venv
             source .venv/bin/activate
             pip install pytest
-            pip install pytest-xdist[psutil]
+            pip install pytest-xdist
             pip install spyrrow --find-links dist --force-reinstall
             pytest -n auto
 

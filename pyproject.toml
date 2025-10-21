@@ -24,7 +24,7 @@ features = ["pyo3/extension-module"]
 [dependency-groups]
 dev = [
     "pytest",
-    "pytest-xdist[psutil]>=3.8.0",
+    "pytest-xdist>=3.8.0",
     "ruff",
     "sphinx>=8.1.3",
 ]
