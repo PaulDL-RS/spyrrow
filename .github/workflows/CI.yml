@@ -27,12 +27,16 @@ jobs:
         platform:
           - runner: ubuntu-22.04
             target: x86_64
+            optional: false
           - runner: ubuntu-22.04
             target: x86
+            optional: false
           - runner: ubuntu-22.04
             target: aarch64
+            optional: false
           - runner: ubuntu-22.04
             target: armv7
+            optional: false
           - runner: ubuntu-22.04
             target: s390x
             optional: true
@@ -70,6 +74,7 @@ jobs:
       - name: pytest
         if: ${{ !startsWith(matrix.platform.target, 'x86') && matrix.platform.target != 'ppc64' }}
         uses: uraimo/run-on-arch-action@v2
+        continue-on-error: ${{ matrix.plateform.optional }}
         with:
           arch: ${{ matrix.platform.target }}
           distro: ubuntu22.04
