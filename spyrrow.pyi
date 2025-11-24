@@ -85,7 +85,7 @@ class StripPackingConfig:
         total_computation_time: Optional[int] = 600,
         exploration_time: Optional[int] = None,
         compression_time: Optional[int] = None,
-        num_wokers:Optional[int]= None,
+        num_workers:Optional[int]= None,
         seed: Optional[int] = None,
     ) -> None:
         """Initializes a configuration object for the strip packing algorithm.

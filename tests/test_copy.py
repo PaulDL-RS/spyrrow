@@ -15,7 +15,7 @@ def test_item_deepcopy():
 
 def test_config_deepcopy():
     config = spyrrow.StripPackingConfig(
-        early_termination=False, total_computation_time=60, num_wokers=3, seed=0
+        early_termination=False, total_computation_time=60, num_workers=3, seed=0
     )
     config2 = deepcopy(config)
     config.early_termination = True
@@ -56,7 +56,7 @@ def test_solution_deepcopy():
     instance = spyrrow.StripPackingInstance(
         "test", strip_height=2.001, items=[rectangle1, triangle1]
     )
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,num_wokers=3,seed=0)
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,num_workers=3,seed=0)
     sol = instance.solve(config)
     sol2 = deepcopy(sol)
     assert sol2
