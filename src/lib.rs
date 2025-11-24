@@ -177,13 +177,13 @@ struct StripPackingConfigPy {
     compression_time: Duration,
     quadtree_depth: u8,
     min_items_separation: Option<f32>,
-    num_wokers: usize,
+    num_workers: usize,
 }
 
 #[pymethods]
 impl StripPackingConfigPy {
     #[new]
-    #[pyo3(signature = (early_termination=true,quadtree_depth=4,min_items_separation=None,total_computation_time=600,exploration_time=None,compression_time=None,num_wokers=None,seed=None))]
+    #[pyo3(signature = (early_termination=true,quadtree_depth=4,min_items_separation=None,total_computation_time=600,exploration_time=None,compression_time=None,num_workers=None,seed=None))]
     fn new(
         early_termination: bool,
         quadtree_depth: u8,
@@ -191,7 +191,7 @@ impl StripPackingConfigPy {
         total_computation_time: Option<u64>,
         exploration_time: Option<u64>,
         compression_time: Option<u64>,
-        num_wokers: Option<usize>,
+        num_workers: Option<usize>,
         seed: Option<u64>,
     ) -> PyResult<Self> {
         let (exploration_time, compression_time) = match (
@@ -214,14 +214,14 @@ impl StripPackingConfigPy {
             }
         };
         let seed = seed.unwrap_or_else(rand::random);
-        let num_wokers = num_wokers.unwrap_or_else(num_cpus::get);
+        let num_workers = num_workers.unwrap_or_else(num_cpus::get);
         Ok(Self {
             early_termination,
             seed,
             exploration_time,
             compression_time,
             quadtree_depth,
-            num_wokers,
+            num_workers,
             min_items_separation,
         })
     }
@@ -336,7 +336,7 @@ impl StripPackingInstancePy {
         let mut rs_config = DEFAULT_SPARROW_CONFIG;
         rs_config.rng_seed = Some(config.seed as usize);
         rs_config.expl_cfg.time_limit = config.exploration_time;
-        rs_config.expl_cfg.separator_config.n_workers = config.num_wokers;
+        rs_config.expl_cfg.separator_config.n_workers = config.num_workers;
         rs_config.cmpr_cfg.time_limit = config.compression_time;
         let rng =  Xoshiro256PlusPlus::seed_from_u64(config.seed);
         if config.early_termination {

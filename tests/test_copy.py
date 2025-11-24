@@ -22,7 +22,7 @@ def test_config_deepcopy():
     assert not config2.early_termination
     assert config.compression_time == config2.compression_time
     assert config.exploration_time == config2.exploration_time
-    assert config.num_wokers == config2.num_wokers
+    assert config.num_workers == config2.num_workers
     assert config.seed == config2.seed
 
 def test_instance_deepcopy():

@@ -74,7 +74,7 @@ class StripPackingConfig:
     exploration_time: timedelta
     compression_time: timedelta
     quadtree_depth: int
-    num_wokers:Optional[int]
+    num_workers:Optional[int]
     min_items_separation: Optional[float]
 
     def __init__(
