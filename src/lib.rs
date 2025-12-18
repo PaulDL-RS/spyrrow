@@ -75,7 +75,7 @@ impl ItemPy {
         }
     }
 
-    fn __deepcopy__(&self, _memo: PyObject) -> Self {
+    fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
         self.clone()
     }
 
@@ -109,7 +109,7 @@ struct PlacedItemPy {
 #[pymethods]
 impl PlacedItemPy {
 
-    fn __deepcopy__(&self, _memo: PyObject) -> Self {
+    fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
         self.clone()
     }
 }
@@ -134,7 +134,7 @@ struct StripPackingSolutionPy {
 #[pymethods]
 impl StripPackingSolutionPy {
 
-    fn __deepcopy__(&self, _memo: PyObject) -> Self {
+    fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
         self.clone()
     }
 }
@@ -226,7 +226,7 @@ impl StripPackingConfigPy {
         })
     }
 
-    fn __deepcopy__(&self, _memo: PyObject) -> Self {
+    fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
         self.clone()
     }
 
@@ -313,7 +313,7 @@ impl StripPackingInstancePy {
         serde_json::to_string(&self).unwrap()
     }
 
-    fn __deepcopy__(&self, _memo: PyObject) -> Self {
+    fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
         self.clone()
     }
 
@@ -361,7 +361,7 @@ impl StripPackingInstancePy {
         // The Python code is not concerned with intermediary solution for now
         let mut dummy_exporter = DummySolListener {};
 
-        py.allow_threads(move || {
+        py.detach(move || {
             let solution = optimize(
                 instance.clone(),
                 rng,
