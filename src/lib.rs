@@ -26,13 +26,13 @@ use std::time::Duration;
 /// Args:
 ///     id (str): The Item identifier
 ///       Needs to be unique accross all Items of a StripPackingInstance
-///     shape (list[tuple[float,float]]): An ordered list of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this list of points.
+///     shape (Sequence[tuple[float,float]]): An ordered Sequence of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this list of points.
 ///       The origin point can be included twice as the finishing point. If not, [last point, first point] is infered to be the last straight line of the shape.
 ///     demand (int): The quantity of identical Items to be placed inside the strip. Should be strictly positive.
-///     allowed_orientations (list[float]|None): List of angles in degrees allowed.
-///       An empty list is equivalent to [0.].
+///     allowed_orientations (Sequence[float]|None): Sequence of angles in degrees allowed.
+///       An empty Sequence is equivalent to [0.].
 ///       A None value means that the item is free to rotate
-///       The algorithmn is only very weakly sensible to the length of the list given.
+///       The algorithmn is only very weakly sensible to the length of the Sequence given.
 ///
 struct ItemPy {
     id: String,
@@ -248,7 +248,7 @@ impl StripPackingConfigPy {
 ///     name (str): The name of the instance. Required by the underlying sparrow library.
 ///       An empty string '' can be used, if the user doesn't have a use for this name.
 ///     strip_height (float): the fixed height of the strip. The unit should be compatible with the Item
-///     items (list[Item]): The Items which defines the instances. All Items should be defined with the same scale ( same length unit).
+///     items (Sequence[Item]): The Items which defines the instances. All Items should be defined with the same scale ( same length unit).
 ///
 ///  Raises:
 ///     ValueError

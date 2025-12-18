@@ -1,4 +1,4 @@
-from typing import TypeAlias, Optional
+from typing import TypeAlias, Optional, Sequence
 from datetime import timedelta
 
 Point: TypeAlias = tuple[float, float]
@@ -12,9 +12,9 @@ class Item:
     def __init__(
         self,
         id: str,
-        shape: list[Point],
+        shape: Sequence[Point],
         demand: int,
-        allowed_orientations: list[float] | None,
+        allowed_orientations: Sequence[float] | None,
     ):
         """
         An Item represents any closed 2D shape by its outer boundary.
@@ -24,13 +24,13 @@ class Item:
         Args:
             id (str): The Item identifier
               Needs to be unique accross all Items of a StripPackingInstance
-            shape: An ordered list of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this list of points.
+            shape: An ordered Sequence of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this Sequence of points.
               The origin point can be included twice as the finishing point. If not, [last point, first point] is infered to be the last straight line of the shape.
             demand: The quantity of identical Items to be placed inside the strip. Should be strictly positive.
-            allowed_orientations (list[float]|None): List of angles in degrees allowed.
-              An empty list is equivalent to [0.].
+            allowed_orientations (Sequence[float]|None): Sequence of angles in degrees allowed.
+              An empty Sequence is equivalent to [0.].
               A None value means that the item is free to rotate
-              The algorithmn is only very weakly sensible to the length of the list given.
+              The algorithmn is only very weakly sensible to the length of the Sequence given.
 
         """
 
@@ -126,7 +126,7 @@ class StripPackingInstance:
     strip_height: float
     items: list[Item]
 
-    def __init__(self, name: str, strip_height: float, items: list[Item]):
+    def __init__(self, name: str, strip_height: float, items: Sequence[Item]):
         """
         An Instance of a Strip Packing Problem.
 
@@ -134,7 +134,7 @@ class StripPackingInstance:
             name (str): The name of the instance. Required by the underlying sparrow library.
               An empty string '' can be used, if the user doesn't have a use for this name.
             strip_height (float): the fixed height of the strip. The unit should be compatible with the Item
-            items (list[Item]): The Items which defines the instances. All Items should be defined with the same scale ( same length unit).
+            items (Sequence[Item]): The Items which defines the instances. All Items should be defined with the same scale ( same length unit).
          Raises:
             ValueError
         """
