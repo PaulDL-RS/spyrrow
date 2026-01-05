@@ -338,6 +338,7 @@ impl StripPackingInstancePy {
         rs_config.expl_cfg.time_limit = config.exploration_time;
         rs_config.expl_cfg.separator_config.n_workers = config.num_workers;
         rs_config.cmpr_cfg.time_limit = config.compression_time;
+        rs_config.cmpr_cfg.separator_config.n_workers = config.num_workers;
         let rng =  Xoshiro256PlusPlus::seed_from_u64(config.seed);
         if config.early_termination {
             rs_config.expl_cfg.max_conseq_failed_attempts = Some(DEFAULT_MAX_CONSEQ_FAILS_EXPL);
