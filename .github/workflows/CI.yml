@@ -31,8 +31,7 @@ jobs:
             target: x86
           - runner: ubuntu-22.04
             target: aarch64
-          - runner: ubuntu-22.04
-            target: armv7
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -134,8 +133,7 @@ jobs:
             target: x86
           - runner: ubuntu-22.04
             target: aarch64
-          - runner: ubuntu-22.04
-            target: armv7
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
