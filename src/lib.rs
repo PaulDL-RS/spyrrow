@@ -4,7 +4,7 @@ use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rand::SeedableRng;
-use rand_xoshiro::Xoshiro256PlusPlus;
+use rand::rngs::Xoshiro256PlusPlus;
 use serde::Serialize;
 use sparrow::EPOCH;
 use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
@@ -75,7 +75,7 @@ impl ItemPy {
         }
     }
 
-    fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
+    fn __deepcopy__(&self, _memo: PyObject) -> Self {
         self.clone()
     }
 
@@ -109,7 +109,7 @@ struct PlacedItemPy {
 #[pymethods]
 impl PlacedItemPy {
 
-    fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
+    fn __deepcopy__(&self, _memo: PyObject) -> Self {
         self.clone()
     }
 }
@@ -134,7 +134,7 @@ struct StripPackingSolutionPy {
 #[pymethods]
 impl StripPackingSolutionPy {
 
-    fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
+    fn __deepcopy__(&self, _memo: PyObject) -> Self {
         self.clone()
     }
 }
@@ -226,7 +226,7 @@ impl StripPackingConfigPy {
         })
     }
 
-    fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
+    fn __deepcopy__(&self, _memo: PyObject) -> Self {
         self.clone()
     }
 
@@ -313,7 +313,7 @@ impl StripPackingInstancePy {
         serde_json::to_string(&self).unwrap()
     }
 
-    fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
+    fn __deepcopy__(&self, _memo: PyObject) -> Self {
         self.clone()
     }
 
@@ -354,14 +354,14 @@ impl StripPackingInstancePy {
             rs_config.poly_simpl_tolerance,
             rs_config.min_item_separation,None
         );
-        let instance = jagua_rs::probs::spp::io::import(&importer, &ext_instance)
+        let instance = jagua_rs::probs::spp::io::import_instance(&importer, &ext_instance)
             .expect("Expected a Strip Packing Problem Instance");
         let mut terminator = BasicTerminator::new();
 
         // The Python code is not concerned with intermediary solution for now
         let mut dummy_exporter = DummySolListener {};
 
-        py.detach(move || {
+        py.allow_threads(move || {
             let solution = optimize(
                 instance.clone(),
                 rng,
@@ -369,6 +369,7 @@ impl StripPackingInstancePy {
                 &mut terminator,
                 &rs_config.expl_cfg,
                 &rs_config.cmpr_cfg,
+                None,
             );
 
             let solution = jagua_rs::probs::spp::io::export(&instance, &solution, *EPOCH);

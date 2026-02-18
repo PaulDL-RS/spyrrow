@@ -1,0 +1,44 @@
+# MARK: sync-workflow — polls sparrow daily, opens PR if rev changed
+name: Sync Sparrow
+
+on:
+  schedule:
+    - cron: "0 6 * * *"  # daily 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get latest sparrow rev
+        id: rev
+        run: |
+          NEW=$(git ls-remote https://github.com/JeroenGar/sparrow.git HEAD | cut -f1)
+          OLD=$(grep -oP 'sparrow.*?rev\s*=\s*"\K[a-f0-9]+' Cargo.toml)
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+          echo "old=$OLD" >> "$GITHUB_OUTPUT"
+          echo "changed=$( [ "$NEW" != "$OLD" ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+
+      - name: Update Cargo.toml
+        if: steps.rev.outputs.changed == 'true'
+        run: python scripts/sync_sparrow.py
+
+      - name: Build check
+        if: steps.rev.outputs.changed == 'true'
+        run: cargo check --lib
+
+      - name: Open PR
+        if: steps.rev.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: auto/sync-sparrow
+          title: "chore: sync sparrow ${{ steps.rev.outputs.new }}"
+          body: |
+            Auto-update from `${{ steps.rev.outputs.old }}` → `${{ steps.rev.outputs.new }}`
+          commit-message: "chore: sync sparrow rev to ${{ steps.rev.outputs.new }}"
