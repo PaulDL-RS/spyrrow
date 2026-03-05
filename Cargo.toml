@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 jagua-rs = { git = "https://github.com/JeroenGar/jagua-rs.git", rev = "ba38bcae9ed3ab41a9e93a1894e2b01ea87c6619", features = [
     "spp",
 ] }
-pyo3 = "0.25.1"
+pyo3 = "0.27.2"
 rand = "0.10"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
