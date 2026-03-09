@@ -23,6 +23,7 @@ features = ["pyo3/extension-module"]
 
 [dependency-groups]
 dev = [
+    "pydantic>=2.12.5",
     "pytest",
     "pytest-xdist>=3.8.0",
     "ruff",

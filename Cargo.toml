@@ -10,14 +10,15 @@ name = "spyrrow"
 crate-type = ["cdylib"]
 
 [dependencies]
-jagua-rs = { git = "https://github.com/JeroenGar/jagua-rs.git", rev = "ba38bcae9ed3ab41a9e93a1894e2b01ea87c6619", features = [
-    "spp",
-] }
+jagua-rs = { features = ["spp"], version = "0.7.0" }
+# jagua-rs = { git = "https://github.com/JeroenGar/jagua-rs.git", rev = "ba38bcae9ed3ab41a9e93a1894e2b01ea87c6619", features = [
+#    "spp",
+#] }
 pyo3 = "0.27.2"
 rand = "0.10"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-sparrow = { git = "https://github.com/JeroenGar/sparrow.git", rev = "eed07866a8a490ef311007b4902e9b1ae2bde505", features = [
+sparrow = { git = "https://github.com/JeroenGar/sparrow.git", rev = "881cdcbdf492ca42ba5413954ea6e41889a3becd", features = [
     "only_final_svg",
 ] }
 num_cpus = "1.17.0"
