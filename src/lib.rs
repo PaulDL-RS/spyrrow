@@ -11,10 +11,11 @@ use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
 use sparrow::consts::{DEFAULT_FAIL_DECAY_RATIO_CMPR, DEFAULT_MAX_CONSEQ_FAILS_EXPL};
 use sparrow::optimizer::optimize;
 use sparrow::util::listener::DummySolListener;
-use sparrow::util::terminator::BasicTerminator;
 use std::collections::HashSet;
 use std::num::NonZeroU64;
 use std::time::Duration;
+
+mod terminator;
 
 #[pyclass(name = "Item", get_all, set_all)]
 #[derive(Clone, Serialize)]
@@ -356,7 +357,7 @@ impl StripPackingInstancePy {
         );
         let instance = jagua_rs::probs::spp::io::import_instance(&importer, &ext_instance)
             .expect("Expected a Strip Packing Problem Instance");
-        let mut terminator = BasicTerminator::new();
+        let mut terminator = terminator::PythonTerminator::default();
 
         // The Python code is not concerned with intermediary solution for now
         let mut dummy_exporter = DummySolListener {};
