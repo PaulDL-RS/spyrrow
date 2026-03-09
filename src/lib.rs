@@ -4,7 +4,7 @@ use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rand::SeedableRng;
-use rand_xoshiro::Xoshiro256PlusPlus;
+use rand::rngs::Xoshiro256PlusPlus;
 use serde::Serialize;
 use sparrow::EPOCH;
 use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
@@ -354,7 +354,7 @@ impl StripPackingInstancePy {
             rs_config.poly_simpl_tolerance,
             rs_config.min_item_separation,None
         );
-        let instance = jagua_rs::probs::spp::io::import(&importer, &ext_instance)
+        let instance = jagua_rs::probs::spp::io::import_instance(&importer, &ext_instance)
             .expect("Expected a Strip Packing Problem Instance");
         let mut terminator = BasicTerminator::new();
 
@@ -369,6 +369,7 @@ impl StripPackingInstancePy {
                 &mut terminator,
                 &rs_config.expl_cfg,
                 &rs_config.cmpr_cfg,
+                None,
             );
 
             let solution = jagua_rs::probs::spp::io::export(&instance, &solution, *EPOCH);
