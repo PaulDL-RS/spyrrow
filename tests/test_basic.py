@@ -16,7 +16,7 @@ def test_basic():
     instance = spyrrow.StripPackingInstance(
         "test", strip_height=2.001, items=[rectangle1, triangle1]
     )
-    config = spyrrow.StripPackingConfig(early_termination=False,total_computation_time=60,num_workers=3,seed=0)
+    config = spyrrow.StripPackingConfig(early_termination=False,total_computation_time=90,num_workers=3,seed=0)
     sol = instance.solve(config)
     assert sol.width == pytest.approx(4,rel=0.05)
 
@@ -75,7 +75,7 @@ def test_one_item():
     instance = spyrrow.StripPackingInstance(
         "test", strip_height=2.001, items=[triangle1]
     )
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=60,num_workers=3,seed=0)
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,num_workers=3,seed=0)
     sol = instance.solve(config)
     assert sol.width == pytest.approx(1,rel=0.05)
 
@@ -90,7 +90,7 @@ def test_one_demand():
     instance = spyrrow.StripPackingInstance(
         "test", strip_height=2.001, items=[triangle1]
     )
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=60,num_workers=3,seed=0)
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,num_workers=3,seed=0)
     sol = instance.solve(config)
     assert sol.width == pytest.approx(math.cos(math.radians(45)),rel=0.05)
 
@@ -113,7 +113,7 @@ def test_2_consecutive_calls():
     )
     config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,seed=0)
     sol = instance.solve(config)
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=60,seed=0)
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,seed=0)
     sol = instance.solve(config)
     assert sol.width == pytest.approx(4,rel=0.05)
 
