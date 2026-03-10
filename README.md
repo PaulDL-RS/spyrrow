@@ -45,6 +45,34 @@ for pi in sol.placed_items:
     print("\n")
 ```
 
+## Progress Monitoring
+
+You can monitor the solver's progress in real time using a `ProgressQueue`.
+Since `solve()` releases the GIL internally, the main thread is free to drain
+the queue while the solver runs:
+
+```python
+import threading
+import spyrrow
+
+# ... set up instance and config ...
+
+queue = spyrrow.ProgressQueue()
+result = [None]
+
+def run():
+    result[0] = instance.solve(config, progress=queue)
+
+thread = threading.Thread(target=run)
+thread.start()
+while thread.is_alive():
+    for phase, strip_width, density in queue.drain():
+        print(f"{phase}: width={strip_width:.1f}, density={density:.1%}")
+    thread.join(timeout=0.5)
+
+solution = result[0]
+```
+
 ## Contributing
 
 Spyrrow is open to contributions.
