@@ -1,5 +1,6 @@
 use jagua_rs::io::ext_repr::{ExtItem as BaseItem, ExtSPolygon, ExtShape};
 use jagua_rs::io::import::Importer;
+use jagua_rs::probs::spp::entities::{SPInstance, SPSolution};
 use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -10,9 +11,10 @@ use sparrow::EPOCH;
 use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
 use sparrow::consts::{DEFAULT_FAIL_DECAY_RATIO_CMPR, DEFAULT_MAX_CONSEQ_FAILS_EXPL};
 use sparrow::optimizer::optimize;
-use sparrow::util::listener::DummySolListener;
-use std::collections::HashSet;
+use sparrow::util::listener::{DummySolListener, ReportType, SolutionListener};
+use std::collections::{HashSet, VecDeque};
 use std::num::NonZeroU64;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 mod terminator;
@@ -137,6 +139,136 @@ impl StripPackingSolutionPy {
 
     fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
         self.clone()
+    }
+}
+
+#[pyclass(name = "ReportType", eq, eq_int)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The type of progress report emitted by the solver.
+///
+/// Variants:
+///     ExplFeas: Feasible solution found during exploration.
+///     ExplInfeas: Infeasible solution during exploration.
+///     ExplImproving: Improving solution during exploration (not yet feasible).
+///     CmprFeas: Feasible solution found during compression.
+///     Final: The final solution.
+///
+enum ReportTypePy {
+    ExplFeas = 0,
+    ExplInfeas = 1,
+    ExplImproving = 2,
+    CmprFeas = 3,
+    Final = 4,
+}
+
+#[pymethods]
+impl ReportTypePy {
+    /// Return a human-readable phase name.
+    ///
+    /// Returns:
+    ///     str: One of "exploring", "compressing", or "final".
+    ///
+    fn phase_name(&self) -> &'static str {
+        match self {
+            ReportTypePy::ExplFeas | ReportTypePy::ExplInfeas | ReportTypePy::ExplImproving => "exploring",
+            ReportTypePy::CmprFeas => "compressing",
+            ReportTypePy::Final => "final",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ReportType.{:?}", self)
+    }
+}
+
+impl From<ReportType> for ReportTypePy {
+    fn from(rt: ReportType) -> Self {
+        match rt {
+            ReportType::ExplFeas => ReportTypePy::ExplFeas,
+            ReportType::ExplInfeas => ReportTypePy::ExplInfeas,
+            ReportType::ExplImproving => ReportTypePy::ExplImproving,
+            ReportType::CmprFeas => ReportTypePy::CmprFeas,
+            ReportType::Final => ReportTypePy::Final,
+        }
+    }
+}
+
+struct ProgressReport {
+    report_type: ReportTypePy,
+    strip_width: f32,
+    density: f32,
+}
+
+#[pyclass(name = "ProgressQueue")]
+#[derive(Clone)]
+/// A thread-safe queue that collects progress reports from the solver.
+///
+/// Create one before calling `solve()` and pass it as the `progress` argument.
+/// While the solver runs (in a background thread), call `drain()` to retrieve
+/// any new reports.
+///
+/// Example::
+///
+///     queue = spyrrow.ProgressQueue()
+///     # run solve in a thread, passing progress=queue
+///     for report_type, strip_width, density in queue.drain():
+///         print(f"{report_type.phase_name()}: width={strip_width:.1f}, density={density:.1%}")
+///
+struct ProgressQueuePy {
+    inner: Arc<Mutex<VecDeque<ProgressReport>>>,
+}
+
+#[pymethods]
+impl ProgressQueuePy {
+    #[new]
+    fn new() -> Self {
+        ProgressQueuePy {
+            inner: Arc::new(Mutex::new(VecDeque::new())),
+        }
+    }
+
+    /// Drain all pending progress reports from the queue.
+    ///
+    /// Returns:
+    ///     list[tuple[ReportType, float, float]]: A list of (report_type, strip_width, density) tuples.
+    ///
+    fn drain(&self) -> Vec<(ReportTypePy, f32, f32)> {
+        let mut queue = self.inner.lock().unwrap();
+        queue.drain(..).map(|r| (r.report_type, r.strip_width, r.density)).collect()
+    }
+}
+
+// Implements SolutionListener to push progress reports onto a shared queue.
+struct ProgressListener {
+    queue: Arc<Mutex<VecDeque<ProgressReport>>>,
+}
+
+impl SolutionListener for ProgressListener {
+    fn report(&mut self, report: ReportType, solution: &SPSolution, instance: &SPInstance) {
+        // Export the solution to get strip_width and density.
+        // This is acceptable because reports are infrequent (only on improving solutions).
+        let exported = jagua_rs::probs::spp::io::export(instance, solution, *EPOCH);
+        let mut queue = self.queue.lock().unwrap();
+        queue.push_back(ProgressReport {
+            report_type: ReportTypePy::from(report),
+            strip_width: exported.strip_width,
+            density: exported.density,
+        });
+    }
+}
+
+// Enum wrapper to avoid duplicating the optimize() call in solve().
+enum SolListener {
+    Dummy(DummySolListener),
+    Progress(ProgressListener),
+}
+
+impl SolutionListener for SolListener {
+    fn report(&mut self, report: ReportType, solution: &SPSolution, instance: &SPInstance) {
+        match self {
+            SolListener::Dummy(d) => d.report(report, solution, instance),
+            SolListener::Progress(p) => p.report(report, solution, instance),
+        }
     }
 }
 
@@ -322,11 +454,15 @@ impl StripPackingInstancePy {
     ///
     /// Args:
     ///     config (StripPackingConfig): The configuration object to control how the instance is solved.
+    ///     progress (ProgressQueue, optional): If provided, progress reports are pushed to this
+    ///       queue during optimization. Use `queue.drain()` from another thread to monitor progress.
+    ///       Defaults to None.
     ///
     /// Returns:
     ///     a StripPackingSolution
     ///
-    fn solve(&self, config: StripPackingConfigPy, py: Python) -> StripPackingSolutionPy {
+    #[pyo3(signature = (config, progress=None))]
+    fn solve(&self, config: StripPackingConfigPy, progress: Option<ProgressQueuePy>, py: Python) -> StripPackingSolutionPy {
         if self.items.is_empty() {
             return StripPackingSolutionPy {
                 width: 0.0,
@@ -359,14 +495,16 @@ impl StripPackingInstancePy {
             .expect("Expected a Strip Packing Problem Instance");
         let mut terminator = terminator::PythonTerminator::default();
 
-        // The Python code is not concerned with intermediary solution for now
-        let mut dummy_exporter = DummySolListener {};
+        let mut listener = match progress {
+            Some(pq) => SolListener::Progress(ProgressListener { queue: pq.inner }),
+            None => SolListener::Dummy(DummySolListener {}),
+        };
 
         py.detach(move || {
             let solution = optimize(
                 instance.clone(),
                 rng,
-                &mut dummy_exporter,
+                &mut listener,
                 &mut terminator,
                 &rs_config.expl_cfg,
                 &rs_config.cmpr_cfg,
@@ -403,6 +541,8 @@ fn spyrrow(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StripPackingInstancePy>()?;
     m.add_class::<StripPackingConfigPy>()?;
     m.add_class::<StripPackingSolutionPy>()?;
+    m.add_class::<ReportTypePy>()?;
+    m.add_class::<ProgressQueuePy>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
