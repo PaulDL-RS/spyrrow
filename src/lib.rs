@@ -381,7 +381,7 @@ impl StripPackingInstancePy {
                 .into_iter()
                 .map(|jpi| PlacedItemPy {
                     id: self.items[jpi.item_id as usize].id.clone(),
-                    rotation: jpi.transformation.rotation.to_degrees(), // Until sparrow exports to degrees instead of radians
+                    rotation: jpi.transformation.rotation, // This is in degrees already know
                     translation: jpi.transformation.translation,
                 })
                 .collect();
