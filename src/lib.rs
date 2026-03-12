@@ -166,7 +166,7 @@ impl ReportTypePy {
     /// Return a human-readable phase name.
     ///
     /// Returns:
-    ///     str: One of "exploring", "compressing", or "final".
+    ///     Literal["exploring", "compressing", "final"]: string representing the phase
     ///
     fn phase_name(&self) -> &'static str {
         match self {

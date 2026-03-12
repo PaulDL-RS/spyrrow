@@ -1,5 +1,5 @@
 import enum
-from typing import TypeAlias, Optional, Sequence
+from typing import TypeAlias, Optional, Sequence, Literal
 from datetime import timedelta
 
 Point: TypeAlias = tuple[float, float]
@@ -85,7 +85,7 @@ class ReportType(enum.IntEnum):
     CmprFeas = 3
     Final = 4
 
-    def phase_name(self) -> str:
+    def phase_name(self) -> Literal["exploring", "compressing", "final"]:
         """Return a human-readable phase name.
 
         Returns:
