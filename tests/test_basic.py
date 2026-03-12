@@ -147,5 +147,18 @@ def test_continuous_rotation():
     assert sol.width >= 3.5
     assert sol.width < 4
 
+# def test_correct_computed_rotation():
+#     rectangle1 = spyrrow.Item(
+#         "rectangle", [(0, 0), (1, 0), (1, 2.5), (0, 2.5), (0, 0)], demand=2, allowed_orientations=[0,90]
+#     )
+#     instance = spyrrow.StripPackingInstance(
+#         "test", strip_height=2.001, items=[rectangle1]
+#     )
+#     config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,seed=0)
+#     sol = instance.solve(config)
+#     assert sol.width == pytest.approx(2.5, rel=0.2)
+#     assert sol.placed_items
+#     assert sol.placed_items[0].rotation == pytest.approx(90, abs=1)
+
 if __name__ == '__main__':
     test_continuous_rotation()
