@@ -102,11 +102,11 @@ class ProgressQueue:
 
     def __init__(self) -> None: ...
 
-    def drain(self) -> list[tuple[ReportType, float, float]]:
+    def drain(self) -> list[tuple[ReportType, StripPackingSolution]]:
         """Drain all pending progress reports from the queue.
 
         Returns:
-            A list of (report_type, strip_width, density) tuples.
+            A list of (report_type, solution) tuples.
         """
 
 class StripPackingConfig:

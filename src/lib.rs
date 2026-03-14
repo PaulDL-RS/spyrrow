@@ -195,8 +195,7 @@ impl From<ReportType> for ReportTypePy {
 
 struct ProgressReport {
     report_type: ReportTypePy,
-    strip_width: f32,
-    density: f32,
+    solution: StripPackingSolutionPy,
 }
 
 #[pyclass(name = "ProgressQueue")]
@@ -211,8 +210,8 @@ struct ProgressReport {
 ///
 ///     queue = spyrrow.ProgressQueue()
 ///     # run solve in a thread, passing progress=queue
-///     for report_type, strip_width, density in queue.drain():
-///         print(f"{report_type.phase_name()}: width={strip_width:.1f}, density={density:.1%}")
+///     for report_type, solution in queue.drain():
+///         print(f"{report_type.phase_name()}: width={solution.width:.1f}, density={solution.density:.1%}")
 ///
 struct ProgressQueuePy {
     inner: Arc<Mutex<VecDeque<ProgressReport>>>,
@@ -230,29 +229,42 @@ impl ProgressQueuePy {
     /// Drain all pending progress reports from the queue.
     ///
     /// Returns:
-    ///     list[tuple[ReportType, float, float]]: A list of (report_type, strip_width, density) tuples.
+    ///     list[tuple[ReportType, StripPackingSolution]]: A list of (report_type, solution) tuples.
     ///
-    fn drain(&self) -> Vec<(ReportTypePy, f32, f32)> {
+    fn drain(&self) -> Vec<(ReportTypePy, StripPackingSolutionPy)> {
         let mut queue = self.inner.lock().unwrap();
-        queue.drain(..).map(|r| (r.report_type, r.strip_width, r.density)).collect()
+        queue.drain(..).map(|r| (r.report_type, r.solution)).collect()
     }
 }
 
 // Implements SolutionListener to push progress reports onto a shared queue.
 struct ProgressListener {
     queue: Arc<Mutex<VecDeque<ProgressReport>>>,
+    item_ids: Vec<String>,
 }
 
 impl SolutionListener for ProgressListener {
     fn report(&mut self, report: ReportType, solution: &SPSolution, instance: &SPInstance) {
-        // Export the solution to get strip_width and density.
-        // This is acceptable because reports are infrequent (only on improving solutions).
+        // Export is acceptable because reports are infrequent (only on improving solutions).
         let exported = jagua_rs::probs::spp::io::export(instance, solution, *EPOCH);
+        let placed_items: Vec<PlacedItemPy> = exported
+            .layout
+            .placed_items
+            .into_iter()
+            .map(|jpi| PlacedItemPy {
+                id: self.item_ids[jpi.item_id as usize].clone(),
+                rotation: jpi.transformation.rotation.to_degrees(),
+                translation: jpi.transformation.translation,
+            })
+            .collect();
         let mut queue = self.queue.lock().unwrap();
         queue.push_back(ProgressReport {
             report_type: ReportTypePy::from(report),
-            strip_width: exported.strip_width,
-            density: exported.density,
+            solution: StripPackingSolutionPy {
+                width: exported.strip_width,
+                density: exported.density,
+                placed_items,
+            },
         });
     }
 }
@@ -496,7 +508,10 @@ impl StripPackingInstancePy {
         let mut terminator = terminator::PythonTerminator::default();
 
         let mut listener = match progress {
-            Some(pq) => SolListener::Progress(ProgressListener { queue: pq.inner }),
+            Some(pq) => SolListener::Progress(ProgressListener {
+                queue: pq.inner,
+                item_ids: self.items.iter().map(|i| i.id.clone()).collect(),
+            }),
             None => SolListener::Dummy(DummySolListener {}),
         };
 

@@ -66,17 +66,17 @@ def run():
 thread = threading.Thread(target=run)
 thread.start()
 while thread.is_alive():
-    for report_type, strip_width, density in queue.drain():
-        print(f"{report_type.phase_name()}: width={strip_width:.1f}, density={density:.1%}")
+    for report_type, solution in queue.drain():
+        print(f"{report_type.phase_name()}: width={solution.width:.1f}, density={solution.density:.1%}")
     thread.join(timeout=0.5)
 
 solution = result[0]
 ```
 
 Each report includes a `ReportType` enum value (`ExplFeas`, `ExplInfeas`, `ExplImproving`,
-`CmprFeas`, `Final`) along with the current strip width and density. Use
-`report_type.phase_name()` for a grouped label ("exploring", "compressing", "final")
-or match on the specific variant for finer control.
+`CmprFeas`, `Final`) along with a full `StripPackingSolution` containing width, density,
+and placed items. Use `report_type.phase_name()` for a grouped label ("exploring",
+"compressing", "final") or match on the specific variant for finer control.
 
 ## Contributing
 
