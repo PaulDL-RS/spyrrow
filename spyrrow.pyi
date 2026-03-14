@@ -1,4 +1,5 @@
-from typing import TypeAlias, Optional, Sequence
+import enum
+from typing import TypeAlias, Optional, Sequence, Literal
 from datetime import timedelta
 
 Point: TypeAlias = tuple[float, float]
@@ -67,6 +68,46 @@ class StripPackingSolution:
     width: float
     density: float
     placed_items: list[PlacedItem]
+
+class ReportType(enum.IntEnum):
+    """The type of progress report emitted by the solver.
+
+    Attributes:
+        ExplFeas: Feasible solution found during exploration.
+        ExplInfeas: Infeasible solution during exploration.
+        ExplImproving: Improving solution during exploration (not yet feasible).
+        CmprFeas: Feasible solution found during compression.
+        Final: The final solution.
+    """
+    ExplFeas = 0
+    ExplInfeas = 1
+    ExplImproving = 2
+    CmprFeas = 3
+    Final = 4
+
+    def phase_name(self) -> Literal["exploring", "compressing", "final"]:
+        """Return a human-readable phase name.
+
+        Returns:
+            One of "exploring", "compressing", or "final".
+        """
+
+class ProgressQueue:
+    """A thread-safe queue that collects progress reports from the solver.
+
+    Create one before calling `solve()` and pass it as the `progress` argument.
+    While the solver runs (in a background thread), call `drain()` to retrieve
+    any new reports.
+    """
+
+    def __init__(self) -> None: ...
+
+    def drain(self) -> list[tuple[ReportType, StripPackingSolution]]:
+        """Drain all pending progress reports from the queue.
+
+        Returns:
+            A list of (report_type, solution) tuples.
+        """
 
 class StripPackingConfig:
     early_termination: bool
@@ -141,12 +182,15 @@ class StripPackingInstance:
     def to_json_str(self) -> str:
         """Return a string of the JSON representation of the object"""
 
-    def solve(self, config: StripPackingConfig) -> StripPackingSolution:
+    def solve(self, config: StripPackingConfig, progress: Optional[ProgressQueue] = None) -> StripPackingSolution:
         """
         The method to solve the instance.
 
         Args:
             config (StripPackingConfig): The configuration object to control how the instance is solved.
+            progress (ProgressQueue, optional): If provided, progress reports are pushed to this
+              queue during optimization. Use `queue.drain()` from another thread to monitor progress.
+              Defaults to None.
 
         Returns:
             a StripPackingSolution
