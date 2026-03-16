@@ -253,7 +253,7 @@ impl SolutionListener for ProgressListener {
             .into_iter()
             .map(|jpi| PlacedItemPy {
                 id: self.item_ids[jpi.item_id as usize].clone(),
-                rotation: jpi.transformation.rotation.to_degrees(),
+                rotation: jpi.transformation.rotation,
                 translation: jpi.transformation.translation,
             })
             .collect();
@@ -534,7 +534,7 @@ impl StripPackingInstancePy {
                 .into_iter()
                 .map(|jpi| PlacedItemPy {
                     id: self.items[jpi.item_id as usize].id.clone(),
-                    rotation: jpi.transformation.rotation, // This is in degrees already know
+                    rotation: jpi.transformation.rotation, // This is in degrees already now
                     translation: jpi.transformation.translation,
                 })
                 .collect();
