@@ -57,7 +57,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install spyrrow --find-links dist --force-reinstall
+          pip install spyrrow --pre --find-links dist --force-reinstall
           pip install pytest
           pip install pytest-xdist
           pytest -n auto
@@ -164,7 +164,7 @@ jobs:
             apk add py3-pip py3-virtualenv
             python3 -m virtualenv .venv
             source .venv/bin/activate
-            pip install spyrrow --no-index --find-links dist --force-reinstall
+            pip install spyrrow --pre --no-index --find-links dist --force-reinstall
             pip install pytest
             pip install pytest-xdist
             pytest -n auto
@@ -183,7 +183,7 @@ jobs:
             source .venv/bin/activate
             pip install pytest
             pip install pytest-xdist
-            pip install spyrrow --find-links dist --force-reinstall
+            pip install spyrrow --pre --find-links dist --force-reinstall
             pytest -n auto
 
   windows:
@@ -219,7 +219,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/Scripts/activate
-          pip install spyrrow --find-links dist --force-reinstall
+          pip install spyrrow --pre --find-links dist --force-reinstall
           pip install pytest
           pip install pytest-xdist[psutil]
           pytest -n auto
@@ -253,7 +253,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install spyrrow --find-links dist --force-reinstall
+          pip install spyrrow --pre --find-links dist --force-reinstall
           pip install pytest
           pip install pytest-xdist[psutil]
           pytest -n auto

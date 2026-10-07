@@ -158,7 +158,9 @@ class Item:
         demand: number of copies to pack, strictly positive. Defaults to 1.
         rotation: allowed rotations, a :class:`Rotation` or a sequence of angles in degrees
             (shorthand for ``Rotation.discrete``). Defaults to ``Rotation.none()``: the item is not rotated.
-        reflection_axes: axes (degrees, counter-clockwise from the item's x axis, through its origin)
+        reflection_axes: **accepted and validated by jagua-rs, but not used by sparrow 0.3.0**: the solver never
+            reflects items, so ``PlacedItem.reflected`` is always ``False`` for now.
+            Axes (degrees, counter-clockwise from the item's x axis, through its origin)
             across which the item may be mirrored. ``[0]`` allows the flip (x, y) -> (x, -y); ``[90]``
             allows (x, y) -> (-x, y). Empty (default): the item is never mirrored.
     """
@@ -222,8 +224,9 @@ class Item:
                 best = min(best, _geometry.height_at(self.shape, a + 2.0 * axis, True))
         return best
 
-    def to_dict(self, ext_id: int | None = None) -> dict[str, Any]:
-        """The jagua-rs / sparrow JSON form. ``ext_id`` overrides the numeric id (see ``StripPackingInstance``)."""
+    def to_dict(self, ext_id: int | None = None, *, with_label: bool = False) -> dict[str, Any]:
+        """The jagua-rs / sparrow JSON form. ``ext_id`` overrides the numeric id and ``with_label`` keeps
+        the original id in an extra ``label`` field (see ``StripPackingInstance``)."""
         orientation: dict[str, Any] = {"rotation": self.rotation.to_dict()}
         if self.reflection_axes:
             orientation["reflection_axes"] = list(self.reflection_axes)
@@ -233,7 +236,7 @@ class Item:
             "orientation": orientation,
             "shape": {"type": "simple_polygon", "data": [list(p) for p in self.shape]},
         }
-        if isinstance(self.id, str):
+        if with_label or isinstance(self.id, str):
             out["label"] = self.id
         return out
 
@@ -450,9 +453,9 @@ class StripPackingInstance:
             )
         for item in items:
             height = item.min_height()
-            if height > usable * (1 + 1e-4):
+            if height > usable * (1 - 1e-7):
                 raise InvalidInstanceError(
-                    f"item {item.id!r} can never fit the strip: its smallest height over its allowed orientations is "
+                    f"item {item.id!r} cannot be placed in the strip (it must fit strictly: sparrow cannot build an initial layout for an exact fit): its smallest height over its allowed orientations is "
                     f"{height:g} but the usable strip height is {usable:g} (strip_height={self.strip_height:g}"
                     f", min_item_separation={self.min_item_separation:g})"
                 )
@@ -476,11 +479,12 @@ class StripPackingInstance:
     def to_dict(self) -> dict[str, Any]:
         """The jagua-rs / sparrow JSON form (``ExtSPInstance``). String ids are kept in a ``label`` field."""
         ext = self._ext_ids()
+        positional = any(k != v for k, v in ext.items())
         return {
             "name": self.name,
             "min_item_separation": self.min_item_separation,
             "strip_height": self.strip_height,
-            "items": [i.to_dict(ext[i.id]) for i in self.items],
+            "items": [i.to_dict(ext[i.id], with_label=positional) for i in self.items],
         }
 
     @classmethod

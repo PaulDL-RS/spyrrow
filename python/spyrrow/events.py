@@ -86,7 +86,9 @@ class SolutionReported:
 
 @dataclass(frozen=True, slots=True)
 class SeparationProgress:
-    """Progress inside one separation call. Iteration 0 describes the initial layout. Frequent."""
+    """Progress inside one separation call. Iteration 0 describes the initial layout. Frequent.
+
+    ``density`` is a fraction in [0, 1] (sparrow reports a percentage, converted for consistency)."""
 
     strip_width: float
     density: float

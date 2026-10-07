@@ -5,7 +5,8 @@
 //! layer (`python/spyrrow`) owns all user facing types and validation.
 
 use jagua_rs::io::import::Importer;
-use jagua_rs::probs::spp::entities::SPSolution;
+use jagua_rs::probs::spp::entities::{SPProblem, SPSolution};
+use sparrow::quantify::tracker::CollisionTracker;
 use jagua_rs::probs::spp::io::ext_repr::{ExtSPInstance, ExtSPSolution};
 use jagua_rs::{Instant, probs::spp::io};
 use pyo3::prelude::*;
@@ -412,7 +413,18 @@ pub fn solve(
     };
     let initial = match initial_solution_json.map(|s| {
         let ext: ExtSPSolution = parse("initial solution", s)?;
-        io::import_solution(&instance, &ext).map_err(|e| format!("{e:#}"))
+        let sol = io::import_solution(&instance, &ext).map_err(|e| format!("{e:#}"))?;
+        // sparrow assumes a feasible start (it is kept as the first feasible solution and may be
+        // returned as is): refuse overlapping / out-of-strip layouts, also w.r.t. min_item_separation.
+        let mut prob = SPProblem::new(instance.clone()).map_err(|e| format!("{e:#}"))?;
+        prob.restore(&sol);
+        let loss = CollisionTracker::new(prob.layout()).get_total_loss();
+        if loss > 0.0 {
+            return Err(format!(
+                "the initial solution is not feasible for this instance (items overlap, leave the strip or violate min_item_separation; total overlap loss {loss:.3e})"
+            ));
+        }
+        Ok(sol)
     }) {
         None => None,
         Some(Ok(sol)) => Some(sol),

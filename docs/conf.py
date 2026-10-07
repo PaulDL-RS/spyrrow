@@ -9,7 +9,7 @@
 project = 'spyrrow'
 copyright = '2025, Paul Durand-Lupinski'
 author = 'Paul Durand-Lupinski'
-release = '0.7.0'
+release = '1.0.0a1'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

@@ -17,66 +17,62 @@ pip install spyrrow
 ```
 
 ## Examples
+
 ```python
 import spyrrow
+from spyrrow import Item, Rotation, SolverConfig, StripPackingInstance
 
-rectangle1 = spyrrow.Item(
-    "rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0]
-)
-triangle1 = spyrrow.Item(
+rectangle = Item("rectangle", [(0, 0), (1, 0), (1, 1), (0, 1)], demand=4)  # not rotated by default
+triangle = Item(
     "triangle",
-    [(0, 0), (1, 0), (1, 1), (0, 0)],
+    [(0, 0), (1, 0), (1, 1)],
     demand=6,
-    allowed_orientations=[0, 90, 180, -90],
+    rotation=[0, 90, 180, -90],  # or Rotation.stepped(90), Rotation.continuous()
+    reflection_axes=[],  # [0] declares the item mirrorable (not yet used by sparrow 0.3.0)
 )
 
-instance = spyrrow.StripPackingInstance(
-    "test", strip_height=2.001, items=[rectangle1, triangle1]
-)
-config = spyrrow.StripPackingConfig(early_termination=False,total_computation_time=60,num_wokers=3,seed=0)
-sol = instance.solve(config)
-print(sol.width) # 4.0 +/- 5%
-print(sol.density)
-print("\n")
-for pi in sol.placed_items:
-    print(pi.id)
-    print(pi.rotation)
-    print(pi.translation)
-    print("\n")
+instance = StripPackingInstance(strip_height=2.001, items=[rectangle, triangle])
+config = SolverConfig(time_limit=60, num_workers=3, seed=0)
+solution = instance.solve(config)
+
+print(solution.width)  # 4.0 +/- 5%
+print(solution.density)
+for pi in solution.placed_items:
+    print(pi.item_id, pi.reflected, pi.rotation, pi.translation)
 ```
 
-## Progress Monitoring
+`solve` blocks for at most `time_limit` seconds (early termination is on by default, use
+`SolverConfig.from_preset(spyrrow.Preset.EXHAUSTIVE)` to spend the whole budget). Press Ctrl-C to
+stop it: `SolveInterrupted` (a `KeyboardInterrupt`) carries the best solution found so far.
 
-You can monitor the solver's progress in real time using a `ProgressQueue`.
-Since `solve()` releases the GIL internally, the main thread is free to drain
-the queue while the solver runs:
+## Progress monitoring and warm start
+
+`solve` calls an `on_event` callback in the calling thread while the solver runs:
 
 ```python
-import threading
-import spyrrow
+from spyrrow import events
 
-# ... set up instance and config ...
+def on_event(event):
+    if isinstance(event, events.SolutionReported) and event.feasible:
+        print(f"{event.elapsed:5.1f}s  width={event.solution.width:.3f}  density={event.solution.density:.1%}")
 
-queue = spyrrow.ProgressQueue()
-result = [None]
+solution = instance.solve(config, on_event=on_event)
 
-def run():
-    result[0] = instance.solve(config, progress=queue)
-
-thread = threading.Thread(target=run)
-thread.start()
-while thread.is_alive():
-    for report_type, solution in queue.drain():
-        print(f"{report_type.phase_name()}: width={solution.width:.1f}, density={solution.density:.1%}")
-    thread.join(timeout=0.5)
-
-solution = result[0]
+# continue from a previous solution (the sparrow CLI can read the file too)
+better = instance.solve(config, initial_solution=solution)
+spyrrow.write_json("instance_and_solution.json", instance, better)
 ```
 
-Each report includes a `ReportType` enum value (`ExplFeas`, `ExplInfeas`, `ExplImproving`,
-`CmprFeas`, `Final`) along with a full `StripPackingSolution` containing width, density,
-and placed items. Use `report_type.phase_name()` for a grouped label ("exploring",
-"compressing", "final") or match on the specific variant for finer control.
+Raise `spyrrow.StopSolving` in the callback to stop gracefully. See `spyrrow.events` for the other events
+(`PhaseStarted`, `SeparationProgress`, ...) and `spyrrow.config` for the advanced sparrow settings.
+
+## Upgrading from 0.x
+
+spyrrow 1.0 changes the API, see [MIGRATION.md](MIGRATION.md). To keep running 0.x code unchanged:
+
+```python
+import spyrrow.v0 as spyrrow  # deprecated, removed in 2.0
+```
 
 ## Contributing
 

@@ -188,7 +188,9 @@ def _decode_event(
     if kind == "compression_step":
         return ev.CompressionStep(payload, elapsed)
     if kind == "separation_progress":
-        return ev.SeparationProgress(*payload, elapsed)
+        width, density, iteration, min_loss = payload
+        # sparrow reports the density in percent, spyrrow everywhere as a fraction
+        return ev.SeparationProgress(width, density / 100.0, iteration, min_loss, elapsed)
     if kind == "separation_result":
         return ev.SeparationFinished(*payload, elapsed)
     report = ev.ReportKind(kind)

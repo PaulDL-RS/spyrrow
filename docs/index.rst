@@ -34,48 +34,53 @@ Examples
 .. code-block:: python
 
    import spyrrow
+   from spyrrow import Item, SolverConfig, StripPackingInstance
 
-   rectangle1 = spyrrow.Item(
-      "rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0]
-   )
-   triangle1 = spyrrow.Item(
+   rectangle = Item("rectangle", [(0, 0), (1, 0), (1, 1), (0, 1)], demand=4)
+   triangle = Item(
       "triangle",
-      [(0, 0), (1, 0), (1, 1), (0, 0)],
+      [(0, 0), (1, 0), (1, 1)],
       demand=6,
-      allowed_orientations=[0, 90, 180, -90],
+      rotation=[0, 90, 180, -90],
    )
 
-   instance = spyrrow.StripPackingInstance(
-      "test", strip_height=2.001, items=[rectangle1, triangle1]
-   )
-   config = spyrrow.StripPackingConfig(early_termination=False,total_computation_time=60,num_wokers=3,seed=0)
-   sol = instance.solve(config)
-   print(sol.width) # 4.0 +/- 5%
-   print(sol.density)
+   instance = StripPackingInstance(strip_height=2.001, items=[rectangle, triangle])
+   config = SolverConfig(time_limit=60, num_workers=3, seed=0)
+   solution = instance.solve(config)
+   print(solution.width)  # 4.0 +/- 5%
+   print(solution.density)
+   for pi in solution.placed_items:
+      print(pi.item_id, pi.reflected, pi.rotation, pi.translation)
 
-   print("\n")
-   for pi in sol.placed_items:
-      print(pi.id)
-      print(pi.rotation)
-      print(pi.translation)
-      print("\n")
+The rotations an item may take are explicit: ``Rotation.none()`` (the default), a list of angles,
+``Rotation.stepped(45)`` or ``Rotation.continuous()`` for a free rotation. Mirroring is allowed with
+``reflection_axes=[0]``.
 
-In order to express that an Item can rotate freely, its `allowed_orientations` attributes should be set to `None`.
+Early termination is on by default. ``SolverConfig.from_preset(Preset.EXHAUSTIVE)`` uses the whole time
+budget. Further options are available through the nested configuration objects of ``spyrrow.config``;
+you may refer to `sparrow <https://github.com/JeroenGar/sparrow>`_ for more precise explanations.
+
+Progress, warm start and Ctrl-C
+===============================
 
 .. code-block:: python
 
-   import spyrrow
+   from spyrrow import events
 
-   triangle1 = spyrrow.Item(
-         "triangle",
-         [(0, 0), (1, 0), (1, 1), (0, 0)],
-         demand=6,
-         allowed_orientations=None,
-      )
+   def on_event(event):
+      if isinstance(event, events.SolutionReported) and event.feasible:
+         print(event.elapsed, event.solution.width)
 
+   solution = instance.solve(config, on_event=on_event)
+   better = instance.solve(config, initial_solution=solution)   # warm start
 
-One can enable early_termination, by setting its value to true inside the configuration object.
-It will use internal mechanism to detect when the solution can not be improved by the current algorithm. 
+Ctrl-C raises ``SolveInterrupted`` (a ``KeyboardInterrupt``) holding the best solution found so far.
 
-Further configuration options are available through the configuration object. 
-You may refer to `sparrow <https://github.com/JeroenGar/sparrow>`_ for more precise explanations.
+Coming from spyrrow 0.x
+=======================
+
+The API changed, see the migration guide (``MIGRATION.md`` in the repository). To keep running 0.x code unchanged:
+
+.. code-block:: python
+
+   import spyrrow.v0 as spyrrow   # deprecated, removed in spyrrow 2.0
