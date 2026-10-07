@@ -13,7 +13,10 @@ use sparrow::EPOCH;
 use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
 use sparrow::consts::{DEFAULT_FAIL_DECAY_RATIO_CMPR, DEFAULT_MAX_CONSEQ_FAILS_EXPL};
 use sparrow::optimizer::optimize;
-use sparrow::util::listener::{DummySolListener, ReportType, SolutionListener};
+use sparrow::util::listener::{
+    DummySolListener, OptimizationPhase, ReportType, SeparationProgress, SeparationResult,
+    SolutionListener,
+};
 use std::collections::{HashSet, VecDeque};
 use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};
@@ -200,6 +203,172 @@ struct ProgressReport {
     solution: StripPackingSolutionPy,
 }
 
+#[pyclass(name = "OptimizationPhase", eq, eq_int)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A phase of the optimization, as announced by a `PhaseEvent`.
+///
+/// Variants:
+///     Exploration: The solver is searching for a feasible strip width.
+///     Compression: The solver is squeezing the best feasible solution.
+///
+enum OptimizationPhasePy {
+    Exploration = 0,
+    Compression = 1,
+}
+
+#[pymethods]
+impl OptimizationPhasePy {
+    fn __repr__(&self) -> String {
+        format!("OptimizationPhase.{:?}", self)
+    }
+}
+
+impl From<OptimizationPhase> for OptimizationPhasePy {
+    fn from(phase: OptimizationPhase) -> Self {
+        match phase {
+            OptimizationPhase::Exploration => OptimizationPhasePy::Exploration,
+            OptimizationPhase::Compression => OptimizationPhasePy::Compression,
+        }
+    }
+}
+
+#[pyclass(name = "PhaseEvent", get_all, frozen)]
+#[derive(Clone, Debug)]
+/// The solver entered a new optimization phase.
+///
+/// Attributes:
+///     phase (OptimizationPhase): the phase that just started.
+///
+struct PhaseEventPy {
+    phase: OptimizationPhasePy,
+}
+
+#[pymethods]
+impl PhaseEventPy {
+    fn __repr__(&self) -> String {
+        format!("PhaseEvent(phase={})", self.phase.__repr__())
+    }
+}
+
+#[pyclass(name = "SeparationProgressEvent", get_all, frozen)]
+#[derive(Clone, Debug)]
+/// Progress of one separation attempt (the solver tries to remove all overlaps at a given strip width).
+///
+/// Emitted once for the initial layout (`iteration == 0`), then after each completed iteration.
+/// This is a high-frequency event.
+///
+/// Attributes:
+///     strip_width (float): the strip width being separated.
+///     density (float): the density of the layout, as a fraction in [0, 1] (same convention as `StripPackingSolution.density`).
+///     iteration (int): the iteration counter within the separation attempt.
+///     min_loss (float): the lowest overlap loss found so far in this attempt; 0.0 means the layout is feasible.
+///
+struct SeparationProgressEventPy {
+    strip_width: f32,
+    density: f32,
+    iteration: usize,
+    min_loss: f32,
+}
+
+#[pymethods]
+impl SeparationProgressEventPy {
+    fn __repr__(&self) -> String {
+        format!(
+            "SeparationProgressEvent(strip_width={}, density={}, iteration={}, min_loss={})",
+            self.strip_width, self.density, self.iteration, self.min_loss
+        )
+    }
+}
+
+#[pyclass(name = "SeparationResultEvent", get_all, frozen)]
+#[derive(Clone, Debug)]
+/// Outcome of a finished separation attempt.
+///
+/// Attributes:
+///     success (bool): whether all overlaps were removed.
+///     elapsed_seconds (float): wall-clock duration of the attempt.
+///     total_evals (int): number of placement evaluations performed.
+///     total_moves (int): number of item moves performed.
+///     iterations (int): number of iterations performed.
+///
+struct SeparationResultEventPy {
+    success: bool,
+    elapsed_seconds: f32,
+    total_evals: usize,
+    total_moves: usize,
+    iterations: usize,
+}
+
+#[pymethods]
+impl SeparationResultEventPy {
+    fn __repr__(&self) -> String {
+        format!(
+            "SeparationResultEvent(success={}, elapsed_seconds={}, total_evals={}, total_moves={}, iterations={})",
+            if self.success { "True" } else { "False" },
+            self.elapsed_seconds,
+            self.total_evals,
+            self.total_moves,
+            self.iterations
+        )
+    }
+}
+
+#[pyclass(name = "CompressionProgressEvent", get_all, frozen)]
+#[derive(Clone, Debug)]
+/// The compression phase starts a new attempt to shrink the strip.
+///
+/// Attributes:
+///     shrink_step (float): the relative shrink of the strip width attempted (0.001 means 0.1%).
+///
+struct CompressionProgressEventPy {
+    shrink_step: f32,
+}
+
+#[pymethods]
+impl CompressionProgressEventPy {
+    fn __repr__(&self) -> String {
+        format!("CompressionProgressEvent(shrink_step={})", self.shrink_step)
+    }
+}
+
+// Internal, GIL-free representation of the detailed events.
+enum ProgressEvent {
+    Phase(OptimizationPhasePy),
+    SeparationProgress(SeparationProgressEventPy),
+    SeparationResult(SeparationResultEventPy),
+    CompressionProgress(CompressionProgressEventPy),
+}
+
+impl ProgressEvent {
+    fn into_py_any(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        Ok(match self {
+            ProgressEvent::Phase(phase) => Py::new(py, PhaseEventPy { phase })?.into_any(),
+            ProgressEvent::SeparationProgress(e) => Py::new(py, e)?.into_any(),
+            ProgressEvent::SeparationResult(e) => Py::new(py, e)?.into_any(),
+            ProgressEvent::CompressionProgress(e) => Py::new(py, e)?.into_any(),
+        })
+    }
+}
+
+// Bounded buffer of detailed events. Drops the oldest event when full.
+struct EventBuffer {
+    events: VecDeque<ProgressEvent>,
+    max_events: usize,
+    dropped: u64,
+}
+
+impl EventBuffer {
+    fn push(&mut self, event: ProgressEvent) {
+        if self.events.len() >= self.max_events {
+            self.events.pop_front();
+            self.dropped += 1;
+        }
+        self.events.push_back(event);
+    }
+}
+
+const DEFAULT_MAX_EVENTS: usize = 10_000;
+
 #[pyclass(name = "ProgressQueue")]
 #[derive(Clone)]
 /// A thread-safe queue that collects progress reports from the solver.
@@ -208,24 +377,56 @@ struct ProgressReport {
 /// While the solver runs (in a background thread), call `drain()` to retrieve
 /// any new reports.
 ///
+/// With `detailed=True`, the queue additionally records fine-grained solver events
+/// (phase changes, separation progress, compression attempts), retrieved with `drain_events()`.
+/// These are kept apart from `drain()`, which is never affected by `detailed`.
+/// Separation progress events are high-frequency (one per solver iteration, typically
+/// hundreds to thousands per second), so the event buffer is bounded: when it holds
+/// `max_events` events, the oldest one is dropped to make room. Call `drain_events()`
+/// regularly to avoid losing events; `dropped_events` counts what was lost.
+/// The reports retrieved by `drain()` are not bounded.
+///
+/// Args:
+///     detailed (bool, optional): Whether to also record fine-grained events. Defaults to False.
+///     max_events (int, optional): Capacity of the event buffer. Must be strictly positive.
+///       Only used if `detailed` is True. Defaults to 10000.
+///
+/// Raises:
+///     ValueError: If `max_events` is zero.
+///
 /// Example::
 ///
-///     queue = spyrrow.ProgressQueue()
+///     queue = spyrrow.ProgressQueue(detailed=True)
 ///     # run solve in a thread, passing progress=queue
 ///     for report_type, solution in queue.drain():
 ///         print(f"{report_type.phase_name()}: width={solution.width:.1f}, density={solution.density:.1%}")
+///     for event in queue.drain_events():
+///         if isinstance(event, spyrrow.PhaseEvent):
+///             print(f"entered {event.phase}")
 ///
 struct ProgressQueuePy {
     inner: Arc<Mutex<VecDeque<ProgressReport>>>,
+    events: Arc<Mutex<EventBuffer>>,
+    detailed: bool,
 }
 
 #[pymethods]
 impl ProgressQueuePy {
     #[new]
-    fn new() -> Self {
-        ProgressQueuePy {
-            inner: Arc::new(Mutex::new(VecDeque::new())),
+    #[pyo3(signature = (detailed=false, max_events=DEFAULT_MAX_EVENTS))]
+    fn new(detailed: bool, max_events: usize) -> PyResult<Self> {
+        if max_events == 0 {
+            return Err(PyValueError::new_err("max_events must be strictly positive"));
         }
+        Ok(ProgressQueuePy {
+            inner: Arc::new(Mutex::new(VecDeque::new())),
+            events: Arc::new(Mutex::new(EventBuffer {
+                events: VecDeque::new(),
+                max_events,
+                dropped: 0,
+            })),
+            detailed,
+        })
     }
 
     /// Drain all pending progress reports from the queue.
@@ -237,12 +438,54 @@ impl ProgressQueuePy {
         let mut queue = self.inner.lock().unwrap();
         queue.drain(..).map(|r| (r.report_type, r.solution)).collect()
     }
+
+    /// Drain all pending detailed events from the queue, oldest first.
+    ///
+    /// Always empty if the queue was not created with `detailed=True`.
+    ///
+    /// Returns:
+    ///     list[PhaseEvent | SeparationProgressEvent | SeparationResultEvent | CompressionProgressEvent]
+    ///
+    fn drain_events(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
+        let events: Vec<ProgressEvent> = {
+            let mut buffer = self.events.lock().unwrap();
+            buffer.events.drain(..).collect()
+        };
+        events.into_iter().map(|e| e.into_py_any(py)).collect()
+    }
+
+    /// bool: Whether the queue records detailed events.
+    #[getter]
+    fn detailed(&self) -> bool {
+        self.detailed
+    }
+
+    /// int: Capacity of the detailed event buffer.
+    #[getter]
+    fn max_events(&self) -> usize {
+        self.events.lock().unwrap().max_events
+    }
+
+    /// int: Number of detailed events dropped so far because the buffer was full.
+    #[getter]
+    fn dropped_events(&self) -> u64 {
+        self.events.lock().unwrap().dropped
+    }
 }
 
 // Implements SolutionListener to push progress reports onto a shared queue.
 struct ProgressListener {
     queue: Arc<Mutex<VecDeque<ProgressReport>>>,
+    events: Option<Arc<Mutex<EventBuffer>>>,
     item_ids: Vec<String>,
+}
+
+impl ProgressListener {
+    fn push_event(&self, event: ProgressEvent) {
+        if let Some(events) = &self.events {
+            events.lock().unwrap().push(event);
+        }
+    }
 }
 
 impl SolutionListener for ProgressListener {
@@ -269,6 +512,36 @@ impl SolutionListener for ProgressListener {
             },
         });
     }
+
+    fn report_phase(&mut self, phase: OptimizationPhase) {
+        self.push_event(ProgressEvent::Phase(phase.into()));
+    }
+
+    fn report_separation_progress(&mut self, progress: SeparationProgress) {
+        self.push_event(ProgressEvent::SeparationProgress(SeparationProgressEventPy {
+            strip_width: progress.strip_width,
+            // sparrow reports a percentage here, spyrrow uses fractions everywhere else
+            density: progress.density / 100.0,
+            iteration: progress.iteration,
+            min_loss: progress.min_loss,
+        }));
+    }
+
+    fn report_separation_result(&mut self, result: SeparationResult) {
+        self.push_event(ProgressEvent::SeparationResult(SeparationResultEventPy {
+            success: result.success,
+            elapsed_seconds: result.elapsed_seconds,
+            total_evals: result.total_evals,
+            total_moves: result.total_moves,
+            iterations: result.iterations,
+        }));
+    }
+
+    fn report_compression_progress(&mut self, shrink_step: f32) {
+        self.push_event(ProgressEvent::CompressionProgress(CompressionProgressEventPy {
+            shrink_step,
+        }));
+    }
 }
 
 // Enum wrapper to avoid duplicating the optimize() call in solve().
@@ -282,6 +555,30 @@ impl SolutionListener for SolListener {
         match self {
             SolListener::Dummy(d) => d.report(report, solution),
             SolListener::Progress(p) => p.report(report, solution),
+        }
+    }
+
+    fn report_phase(&mut self, phase: OptimizationPhase) {
+        if let SolListener::Progress(p) = self {
+            p.report_phase(phase);
+        }
+    }
+
+    fn report_separation_progress(&mut self, progress: SeparationProgress) {
+        if let SolListener::Progress(p) = self {
+            p.report_separation_progress(progress);
+        }
+    }
+
+    fn report_separation_result(&mut self, result: SeparationResult) {
+        if let SolListener::Progress(p) = self {
+            p.report_separation_result(result);
+        }
+    }
+
+    fn report_compression_progress(&mut self, shrink_step: f32) {
+        if let SolListener::Progress(p) = self {
+            p.report_compression_progress(shrink_step);
         }
     }
 }
@@ -484,7 +781,8 @@ impl StripPackingInstancePy {
     /// Args:
     ///     config (StripPackingConfig): The configuration object to control how the instance is solved.
     ///     progress (ProgressQueue, optional): If provided, progress reports are pushed to this
-    ///       queue during optimization. Use `queue.drain()` from another thread to monitor progress.
+    ///       queue during optimization. Use `queue.drain()` (and `queue.drain_events()` for a detailed queue)
+    ///       from another thread to monitor progress.
     ///       Defaults to None.
     ///
     /// Returns:
@@ -531,6 +829,7 @@ impl StripPackingInstancePy {
         let mut listener = match progress {
             Some(pq) => SolListener::Progress(ProgressListener {
                 queue: pq.inner,
+                events: pq.detailed.then_some(pq.events),
                 item_ids: self.items.iter().map(|i| i.id.clone()).collect(),
             }),
             None => SolListener::Dummy(DummySolListener {}),
@@ -579,6 +878,11 @@ fn spyrrow(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StripPackingConfigPy>()?;
     m.add_class::<StripPackingSolutionPy>()?;
     m.add_class::<ReportTypePy>()?;
+    m.add_class::<OptimizationPhasePy>()?;
+    m.add_class::<PhaseEventPy>()?;
+    m.add_class::<SeparationProgressEventPy>()?;
+    m.add_class::<SeparationResultEventPy>()?;
+    m.add_class::<CompressionProgressEventPy>()?;
     m.add_class::<ProgressQueuePy>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
