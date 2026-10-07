@@ -1,9 +1,10 @@
 use jagua_rs::io::ext_repr::{
-    ExtItem as BaseItem, ExtOrientation, ExtRotation, ExtSPolygon, ExtShape,
+    ExtItem as BaseItem, ExtLayout, ExtOrientation, ExtPlacedItem, ExtRotation, ExtSPolygon,
+    ExtShape, ExtTransformation,
 };
 use jagua_rs::io::import::Importer;
 use jagua_rs::probs::spp::entities::SPSolution;
-use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance};
+use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance, ExtSPSolution};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use rand::SeedableRng;
@@ -13,8 +14,9 @@ use sparrow::EPOCH;
 use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
 use sparrow::consts::{DEFAULT_FAIL_DECAY_RATIO_CMPR, DEFAULT_MAX_CONSEQ_FAILS_EXPL};
 use sparrow::optimizer::optimize;
+use sparrow::util::io::ExtSPOutput;
 use sparrow::util::listener::{DummySolListener, ReportType, SolutionListener};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -95,7 +97,7 @@ impl ItemPy {
 }
 
 #[pyclass(name = "PlacedItem", get_all)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 /// An object representing where a copy of an Item was placed inside the strip.
 ///
 /// Attributes:
@@ -120,7 +122,7 @@ impl PlacedItemPy {
 }
 
 #[pyclass(name = "StripPackingSolution", get_all)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 /// An object representing the solution to a given StripPackingInstance.
 ///
 /// Can not be directly instanciated. Result from StripPackingInstance.solve.
@@ -141,6 +143,15 @@ impl StripPackingSolutionPy {
 
     fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
         self.clone()
+    }
+
+    /// Return a string of the JSON representation of the object
+    ///
+    /// Returns:
+    ///     str
+    ///
+    fn to_json_str(&self) -> String {
+        serde_json::to_string(&self).unwrap()
     }
 }
 
@@ -450,6 +461,50 @@ impl StripPackingInstancePy {
     }
 }
 
+impl StripPackingInstancePy {
+    // Converts a spyrrow solution back to jagua-rs' external representation.
+    // String ids are mapped to the item index (the external id used by `to_ext_instance`).
+    // Raises a ValueError on an unknown id.
+    fn to_ext_solution(&self, solution: &StripPackingSolutionPy) -> PyResult<ExtSPSolution> {
+        let index_of: HashMap<&str, u64> = self
+            .items
+            .iter()
+            .enumerate()
+            .map(|(idx, item)| (item.id.as_str(), idx as u64))
+            .collect();
+        let placed_items = solution
+            .placed_items
+            .iter()
+            .map(|pi| {
+                let item_id = *index_of.get(pi.id.as_str()).ok_or_else(|| {
+                    PyValueError::new_err(format!(
+                        "The solution places an item with id '{}' which is not an item of the instance",
+                        pi.id
+                    ))
+                })?;
+                Ok(ExtPlacedItem {
+                    item_id,
+                    transformation: ExtTransformation {
+                        reflected: false,
+                        rotation: pi.rotation,
+                        translation: pi.translation,
+                    },
+                })
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(ExtSPSolution {
+            strip_width: solution.width,
+            layout: ExtLayout {
+                container_id: 0,
+                placed_items,
+                density: solution.density,
+            },
+            density: solution.density,
+            run_time_sec: 0,
+        })
+    }
+}
+
 #[pymethods]
 impl StripPackingInstancePy {
     #[new]
@@ -477,6 +532,45 @@ impl StripPackingInstancePy {
 
     fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
         self.clone()
+    }
+
+    /// Return a JSON string in the input format of the sparrow command line tool (and Sparrow Studio),
+    /// to reproduce or debug a spyrrow run outside of Python.
+    ///
+    /// Without `solution`, the result is an instance file, to be given to `sparrow -i`.
+    /// With `solution`, the instance and the solution are put in a single document (the format of
+    /// the output of sparrow), which `sparrow -i` uses as a warm start.
+    /// Items are identified by their index in `items` (the string ids are not exported).
+    /// Only `min_items_separation` of the configuration is part of the instance;
+    /// the time limits, seed, number of workers, ... are options of the sparrow command line.
+    ///
+    /// Args:
+    ///     config (StripPackingConfig, optional): If given, its `min_items_separation` is exported
+    ///       as the minimum separation of the instance. Defaults to None, meaning no separation.
+    ///     solution (StripPackingSolution, optional): A solution of this instance to export along with it.
+    ///       Defaults to None.
+    ///
+    /// Returns:
+    ///     str
+    ///
+    /// Raises:
+    ///     ValueError: If the solution places an item which is not an item of the instance.
+    ///
+    #[pyo3(signature = (config=None, solution=None))]
+    fn to_sparrow_json_str(
+        &self,
+        config: Option<StripPackingConfigPy>,
+        solution: Option<StripPackingSolutionPy>,
+    ) -> PyResult<String> {
+        let ext_instance = self.to_ext_instance(config.and_then(|c| c.min_items_separation));
+        let json = match solution {
+            None => serde_json::to_string(&ext_instance),
+            Some(solution) => serde_json::to_string(&ExtSPOutput {
+                instance: ext_instance,
+                solution: self.to_ext_solution(&solution)?,
+            }),
+        };
+        json.map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
     }
 
     /// The method to solve the instance.

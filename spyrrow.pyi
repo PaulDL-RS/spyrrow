@@ -69,6 +69,9 @@ class StripPackingSolution:
     density: float
     placed_items: list[PlacedItem]
 
+    def to_json_str(self) -> str:
+        """Return a string of the JSON representation of the object"""
+
 class ReportType(enum.IntEnum):
     """The type of progress report emitted by the solver.
 
@@ -181,6 +184,32 @@ class StripPackingInstance:
         """
     def to_json_str(self) -> str:
         """Return a string of the JSON representation of the object"""
+
+    def to_sparrow_json_str(
+        self,
+        config: Optional[StripPackingConfig] = None,
+        solution: Optional[StripPackingSolution] = None,
+    ) -> str:
+        """
+        Return a JSON string in the input format of the sparrow command line tool (and Sparrow Studio),
+        to reproduce or debug a spyrrow run outside of Python.
+
+        Without `solution`, the result is an instance file, to be given to `sparrow -i`.
+        With `solution`, the instance and the solution are put in a single document (the format of
+        the output of sparrow), which `sparrow -i` uses as a warm start.
+        Items are identified by their index in `items` (the string ids are not exported).
+        Only `min_items_separation` of the configuration is part of the instance;
+        the time limits, seed, number of workers, ... are options of the sparrow command line.
+
+        Args:
+            config (StripPackingConfig, optional): If given, its `min_items_separation` is exported
+              as the minimum separation of the instance. Defaults to None, meaning no separation.
+            solution (StripPackingSolution, optional): A solution of this instance to export along with it.
+              Defaults to None.
+
+        Raises:
+            ValueError: If the solution places an item which is not an item of the instance.
+        """
 
     def solve(self, config: StripPackingConfig, progress: Optional[ProgressQueue] = None) -> StripPackingSolution:
         """
