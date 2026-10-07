@@ -9,6 +9,7 @@ class Item:
     demand: int
     shape: list[Point]
     allowed_orientations: list[float]
+    rotation_step: float | None
 
     def __init__(
         self,
@@ -16,6 +17,7 @@ class Item:
         shape: Sequence[Point],
         demand: int,
         allowed_orientations: Sequence[float] | None,
+        rotation_step: float | None = None,
     ):
         """
         An Item represents any closed 2D shape by its outer boundary.
@@ -32,7 +34,14 @@ class Item:
               An empty Sequence is equivalent to [0.].
               A None value means that the item is free to rotate
               The algorithmn is only very weakly sensible to the length of the Sequence given.
+            rotation_step (float|None): Angle in degrees of a regular rotation step. Defaults to None.
+              The Item is then allowed the angles 0, step, 2*step, ... below 360°.
+              Must be in (0, 360] and evenly divide 360° (e.g. 90., 45., 60., 360.). 360. means no rotation.
+              Can only be used with `allowed_orientations=None`.
 
+        Raises:
+            ValueError: If both `allowed_orientations` and `rotation_step` are provided, or if `rotation_step` is not a valid step.
+              The attributes can also be set after construction. In this case, the same checks are done by `StripPackingInstance.solve`.
         """
 
     def to_json_str(self) -> str:

@@ -38,46 +38,59 @@ mod terminator;
 ///       An empty Sequence is equivalent to [0.].
 ///       A None value means that the item is free to rotate
 ///       The algorithmn is only very weakly sensible to the length of the Sequence given.
+///     rotation_step (float|None): Angle in degrees of a regular rotation step. Defaults to None.
+///       The Item is then allowed the angles 0, step, 2*step, ... below 360°.
+///       Must be in (0, 360] and evenly divide 360° (e.g. 90., 45., 60., 360.). 360. means no rotation.
+///       Can only be used with `allowed_orientations=None`.
+///
+/// Raises:
+///     ValueError: If both `allowed_orientations` and `rotation_step` are provided, or if `rotation_step` is not a valid step.
+///       The attributes can also be set after construction. In this case, the same checks are done by `StripPackingInstance.solve`.
 ///
 struct ItemPy {
     id: String,
     demand: NonZeroU64,
     allowed_orientations: Option<Vec<f32>>,
     shape: Vec<(f32, f32)>,
+    // Omitted from the JSON when None, to keep the output of items without rotation step unchanged
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rotation_step: Option<f32>,
 }
 
 #[pymethods]
 impl ItemPy {
     #[new]
+    #[pyo3(signature = (id, shape, demand, allowed_orientations=None, rotation_step=None))]
     fn new(
         id: String,
         shape: Vec<(f32, f32)>,
         demand: NonZeroU64,
         allowed_orientations: Option<Vec<f32>>,
-    ) -> Self {
-        ItemPy {
+        rotation_step: Option<f32>,
+    ) -> PyResult<Self> {
+        to_ext_rotation(&allowed_orientations, rotation_step)?;
+        Ok(ItemPy {
             id,
             demand,
             allowed_orientations,
             shape,
-        }
+            rotation_step,
+        })
     }
 
     fn __repr__(&self) -> String {
-        if self.allowed_orientations.is_some() {
-            format!(
-                "Item(id={},shape={:?}, demand={}, allowed_orientations={:?})",
-                self.id,
-                self.shape,
-                self.demand,
-                self.allowed_orientations.clone().unwrap()
-            )
-        } else {
-            format!(
-                "Item(id={},shape={:?}, demand={})",
-                self.id, self.shape, self.demand,
-            )
+        let mut repr = format!(
+            "Item(id={},shape={:?}, demand={}",
+            self.id, self.shape, self.demand
+        );
+        if let Some(orientations) = &self.allowed_orientations {
+            repr.push_str(&format!(", allowed_orientations={:?}", orientations));
         }
+        if let Some(step) = self.rotation_step {
+            repr.push_str(&format!(", rotation_step={:?}", step));
+        }
+        repr.push(')');
+        repr
     }
 
     fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
@@ -406,47 +419,83 @@ struct StripPackingInstancePy {
     pub items: Vec<ItemPy>,
 }
 
-// Maps spyrrow's `allowed_orientations` convention onto jagua-rs' explicit rotation modes:
-// None -> free rotation, [] -> [0.], otherwise the given discrete angles.
-fn to_ext_orientation(allowed_orientations: Option<Vec<f32>>) -> ExtOrientation {
-    let rotation = match allowed_orientations {
-        None => ExtRotation::Continuous {},
-        Some(angles) if angles.is_empty() => ExtRotation::Discrete { angles: vec![0.0] },
-        Some(angles) => ExtRotation::Discrete { angles },
-    };
-    ExtOrientation {
-        rotation,
-        reflection_axes: Vec::new(),
+// Maps spyrrow's `allowed_orientations` and `rotation_step` onto jagua-rs' explicit rotation modes:
+// None -> free rotation (or stepped rotation if a step is given), [] -> [0.], otherwise the given discrete angles.
+// A step is validated with the rule of jagua-rs' importer, to fail early with a clear error.
+fn to_ext_rotation(
+    allowed_orientations: &Option<Vec<f32>>,
+    rotation_step: Option<f32>,
+) -> PyResult<ExtRotation> {
+    match (allowed_orientations, rotation_step) {
+        (Some(_), Some(_)) => Err(PyValueError::new_err(
+            "allowed_orientations and rotation_step can not be both provided",
+        )),
+        (None, Some(step)) => {
+            if !(step.is_finite() && step > 0.0 && step <= 360.0) {
+                return Err(PyValueError::new_err(format!(
+                    "rotation_step must be finite and in (0, 360], got {step}"
+                )));
+            }
+            let step_f64 = f64::from(step);
+            let count = (360.0 / step_f64).round();
+            if count > 65_536.0
+                || (count * step_f64 - 360.0).abs() > 360.0 * f64::from(f32::EPSILON)
+            {
+                return Err(PyValueError::new_err(format!(
+                    "rotation_step must evenly divide 360 into at most 65536 angles, got {step}"
+                )));
+            }
+            Ok(ExtRotation::Stepped { step })
+        }
+        (None, None) => Ok(ExtRotation::Continuous {}),
+        (Some(angles), None) if angles.is_empty() => Ok(ExtRotation::Discrete { angles: vec![0.0] }),
+        (Some(angles), None) => Ok(ExtRotation::Discrete {
+            angles: angles.clone(),
+        }),
     }
 }
 
+fn to_ext_orientation(
+    allowed_orientations: &Option<Vec<f32>>,
+    rotation_step: Option<f32>,
+) -> PyResult<ExtOrientation> {
+    Ok(ExtOrientation {
+        rotation: to_ext_rotation(allowed_orientations, rotation_step)?,
+        reflection_axes: Vec::new(),
+    })
+}
+
 impl StripPackingInstancePy {
-    fn to_ext_instance(&self, min_item_separation: Option<f32>) -> ExtSPInstance {
+    fn to_ext_instance(&self, py: Python, min_item_separation: Option<f32>) -> PyResult<ExtSPInstance> {
         let items = self
             .items
             .iter()
             .enumerate()
             .map(|(idx, v)| {
+                let orientation = to_ext_orientation(&v.allowed_orientations, v.rotation_step)
+                    .map_err(|e| {
+                        PyValueError::new_err(format!("Invalid Item '{}': {}", v.id, e.value(py)))
+                    })?;
                 let polygon = ExtSPolygon(v.shape.clone());
                 let shape = ExtShape::SimplePolygon(polygon);
                 let base = BaseItem {
                     id: idx as u64,
-                    orientation: to_ext_orientation(v.allowed_orientations.clone()),
+                    orientation,
                     shape,
                     min_quality: None,
                 };
-                ExtItem {
+                Ok(ExtItem {
                     base,
                     demand: v.demand.get(),
-                }
+                })
             })
-            .collect();
-        ExtSPInstance {
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(ExtSPInstance {
             name: self.name.clone(),
             min_item_separation: min_item_separation.unwrap_or(0.0),
             strip_height: self.strip_height,
             items,
-        }
+        })
     }
 }
 
@@ -517,7 +566,7 @@ impl StripPackingInstancePy {
         }
         rs_config.cde_config.quadtree_depth = config.quadtree_depth;
 
-        let ext_instance = self.to_ext_instance(config.min_items_separation);
+        let ext_instance = self.to_ext_instance(py, config.min_items_separation)?;
         let importer = Importer::new(
             rs_config.cde_config,
             rs_config.poly_simpl_tolerance,
