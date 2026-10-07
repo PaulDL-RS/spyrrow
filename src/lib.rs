@@ -64,7 +64,7 @@ struct ItemPy {
 #[pymethods]
 impl ItemPy {
     #[new]
-    #[pyo3(signature = (id, shape, demand, allowed_orientations=None, reflection_axis=None))]
+    #[pyo3(signature = (id, shape, demand, allowed_orientations, reflection_axis=None))]
     fn new(
         id: String,
         shape: Vec<(f32, f32)>,

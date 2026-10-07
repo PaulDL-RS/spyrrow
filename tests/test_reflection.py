@@ -179,3 +179,9 @@ def test_deepcopy_keeps_axis():
 
     item = spyrrow.Item("t", CHIRAL, 1, None, reflection_axis=12.5)
     assert copy.deepcopy(item).reflection_axis == 12.5
+
+
+def test_allowed_orientations_still_required():
+    # same contract as spyrrow 0.10: allowed_orientations has no default
+    with pytest.raises(TypeError):
+        spyrrow.Item("x", [(0, 0), (1, 0), (1, 1)], 1)
