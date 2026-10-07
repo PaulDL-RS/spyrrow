@@ -3,7 +3,7 @@ use jagua_rs::io::ext_repr::{
     ExtShape, ExtTransformation,
 };
 use jagua_rs::io::import::Importer;
-use jagua_rs::probs::spp::entities::SPSolution;
+use jagua_rs::probs::spp::entities::{SPProblem, SPSolution};
 use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance, ExtSPSolution};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -14,6 +14,7 @@ use sparrow::EPOCH;
 use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
 use sparrow::consts::{DEFAULT_FAIL_DECAY_RATIO_CMPR, DEFAULT_MAX_CONSEQ_FAILS_EXPL};
 use sparrow::optimizer::optimize;
+use sparrow::quantify::tracker::CollisionTracker;
 use sparrow::util::listener::{DummySolListener, ReportType, SolutionListener};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::NonZeroU64;
@@ -538,8 +539,9 @@ impl StripPackingInstancePy {
     ///       if the solution is feasible, the returned width is not larger than its width.
     ///       The strip height is always the one of this instance, and is not checked against the solution:
     ///       a solution computed for another strip height or another set of items is not meaningful.
-    ///       Neither feasibility nor the compatibility with `min_items_separation` or the allowed orientations is checked:
-    ///       an infeasible or overlapping start is repaired by the solver as part of the exploration, but nothing guarantees it succeeds.
+    ///       The solution must be feasible for this instance and this config (no overlap, items inside the strip,
+    ///       `min_items_separation` respected), otherwise a ValueError is raised: the solver assumes a feasible start.
+    ///       A solution computed with a smaller separation or another strip height is typically not feasible.
     ///       Ignored for an instance without items (which must then be given an empty solution).
     ///       Defaults to None.
     ///
@@ -548,7 +550,7 @@ impl StripPackingInstancePy {
     ///
     /// Raises:
     ///     ValueError: If the instance can not be imported by the solver (invalid shape, separation larger than the strip height, ...),
-    ///       or if the initial solution is not valid for this instance (unknown item id, item count different from the demand, invalid width, ...)
+    ///       or if the initial solution is not valid for this instance (unknown item id, item count different from the demand, invalid width, infeasible layout, ...)
     ///     RuntimeError: If the solver fails to build an initial solution
     ///
     #[pyo3(signature = (config, progress=None, initial_solution=None))]
@@ -601,9 +603,21 @@ impl StripPackingInstancePy {
                         )));
                     }
                 }
-                jagua_rs::probs::spp::io::import_solution(&instance, &ext_solution).map_err(|e| {
-                    PyValueError::new_err(format!("Invalid initial_solution: {e:#}"))
-                })
+                let solution = jagua_rs::probs::spp::io::import_solution(&instance, &ext_solution)
+                    .map_err(|e| PyValueError::new_err(format!("Invalid initial_solution: {e:#}")))?;
+                // The solver assumes its starting point is feasible (same criterion as sparrow: zero total loss).
+                let mut prob = SPProblem::new(instance.clone())
+                    .map_err(|e| PyValueError::new_err(format!("Invalid StripPackingInstance: {e:#}")))?;
+                prob.restore(&solution);
+                let loss = CollisionTracker::new(prob.layout()).get_total_loss();
+                if loss > 0.0 {
+                    return Err(PyValueError::new_err(format!(
+                        "Invalid initial_solution: it is not feasible for this instance and configuration \
+                         (collision loss {loss}). Items overlap each other or exceed the strip, possibly because the \
+                         strip height or min_items_separation differ from the ones the solution was computed with."
+                    )));
+                }
+                Ok(solution)
             })
             .transpose()?;
         let mut terminator = terminator::PythonTerminator::default();

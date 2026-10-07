@@ -68,3 +68,18 @@ def test_empty_instance():
     solution = make_instance().solve(config(2))
     with pytest.raises(ValueError):
         empty.solve(config(1), initial_solution=solution)
+
+
+def test_infeasible_start_rejected():
+    # A layout feasible without separation is not feasible with a separation of 0.01
+    # (the unit squares and triangles are packed edge to edge): it must not be returned as if valid.
+    instance = make_instance()
+    solution = instance.solve(config(4))
+    with pytest.raises(ValueError, match="not feasible"):
+        instance.solve(config(4, min_items_separation=0.01), initial_solution=solution)
+
+
+def test_strip_height_change_rejected():
+    solution = make_instance().solve(config(3))
+    with pytest.raises(ValueError, match="not feasible"):
+        make_instance(height=1.5).solve(config(2), initial_solution=solution)

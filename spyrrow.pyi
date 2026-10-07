@@ -203,8 +203,9 @@ class StripPackingInstance:
               if the solution is feasible, the returned width is not larger than its width.
               The strip height is always the one of this instance, and is not checked against the solution:
               a solution computed for another strip height or another set of items is not meaningful.
-              Neither feasibility nor the compatibility with `min_items_separation` or the allowed orientations is checked:
-              an infeasible or overlapping start is repaired by the solver as part of the exploration, but nothing guarantees it succeeds.
+              The solution must be feasible for this instance and this config (no overlap, items inside the strip,
+              `min_items_separation` respected), otherwise a ValueError is raised: the solver assumes a feasible start.
+              A solution computed with a smaller separation or another strip height is typically not feasible.
               Ignored for an instance without items (which must then be given an empty solution).
               Defaults to None.
 
@@ -213,6 +214,6 @@ class StripPackingInstance:
 
         Raises:
             ValueError: If the instance can not be imported by the solver (invalid shape, separation larger than the strip height, ...),
-              or if the initial solution is not valid for this instance (unknown item id, item count different from the demand, invalid width, ...)
+              or if the initial solution is not valid for this instance (unknown item id, item count different from the demand, invalid width, infeasible layout, ...)
             RuntimeError: If the solver fails to build an initial solution
         """
