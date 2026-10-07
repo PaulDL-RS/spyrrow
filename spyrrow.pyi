@@ -9,6 +9,7 @@ class Item:
     demand: int
     shape: list[Point]
     allowed_orientations: list[float]
+    reflection_axis: float | None
 
     def __init__(
         self,
@@ -16,6 +17,7 @@ class Item:
         shape: Sequence[Point],
         demand: int,
         allowed_orientations: Sequence[float] | None,
+        reflection_axis: float | None = None,
     ):
         """
         An Item represents any closed 2D shape by its outer boundary.
@@ -32,7 +34,18 @@ class Item:
               An empty Sequence is equivalent to [0.].
               A None value means that the item is free to rotate
               The algorithmn is only very weakly sensible to the length of the Sequence given.
+            reflection_axis (float|None): Angle in degrees, from the x axis, of an axis across which the Item may be mirrored. Defaults to None.
+              None means that the Item is never reflected.
+              When set, the solver is free to place the Item either as is or mirrored across this axis (it is not forced to mirror).
+              The axis is taken modulo 180° and is expressed in the Item's own coordinate system, before any rotation.
+              The rotations allowed (see `allowed_orientations`) are applied after the reflection.
+              For instance, with `allowed_orientations=[]` and `reflection_axis=0.`, the Item can only be mirrored across its x axis.
+              Mirrored placements are reported by `PlacedItem.reflected`.
+              Note: the sparrow version bundled (0.3.0) only samples the non-reflected orientations, so the solver currently never returns a reflected placement.
+              The axis is still imported and validated by the underlying jagua-rs, and will take effect once the solver explores reflections.
 
+        Raises:
+            ValueError: If `reflection_axis` is not finite.
         """
 
     def to_json_str(self) -> str:
@@ -47,11 +60,22 @@ class PlacedItem:
         rotation (float): The rotation angle in degrees, assuming that the original Item was defined with 0° as its rotation angle.
           Use the origin (0.0,0.0) as the rotation point.
         translation (tuple[float,float]): the translation vector in the X-Y axis. To apply after the rotation
+        reflected (bool): Whether the Item is mirrored in this placement. False for Items without a `reflection_axis`.
+
+    The placed shape is obtained from the original Item shape by applying, in this order:
+
+    1. if `reflected`, the mirroring (x, y) -> (x, -y)
+    2. the rotation by `rotation` degrees (counter-clockwise), around the origin (0.0,0.0)
+    3. the translation by `translation`
+
+    Since mirroring across an axis at angle `a` is the mirroring (x, y) -> (x, -y) followed by a rotation of `2*a`,
+    the `rotation` of a reflected placement includes this `2*a` term (modulo 360°).
     """
 
     id: str
     translation: Point
     rotation: float
+    reflected: bool
 
 class StripPackingSolution:
     """
