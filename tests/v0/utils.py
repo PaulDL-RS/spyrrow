@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 import json
 
 if TYPE_CHECKING:
-    from spyrrow import StripPackingInstance
+    from spyrrow.v0 import StripPackingInstance
 
 def convert_to_sparrow_json_instance(instance:"StripPackingInstance")->dict:
     json_str = instance.to_json_str()

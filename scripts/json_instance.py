@@ -2,7 +2,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, Field, PositiveFloat, PositiveInt, field_validator
 
-from spyrrow import Item, StripPackingInstance
+from spyrrow.v0 import Item, StripPackingInstance
 
 
 class SparrowSimplePolygon(BaseModel):

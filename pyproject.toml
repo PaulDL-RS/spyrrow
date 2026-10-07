@@ -5,10 +5,11 @@ build-backend = "maturin"
 [project]
 name = "spyrrow"
 requires-python = ">=3.10"
+readme = "README.md"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
+    "Typing :: Typed",
 ]
 authors = [ {name = "Paul Durand-Lupinski", email = "paul.durand-lupinski@reeverse-systems.com"}]
 license = { file = "LICENSE.txt" }
@@ -19,7 +20,14 @@ documentation = "https://spyrrow.readthedocs.io/"
 source = "https://github.com/PaulDL-RS/spyrrow"
 
 [tool.maturin]
+python-source = "python"
+module-name = "spyrrow._core"
 features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+# tests/ and tests/v0/ contain test files with the same basename
+addopts = "--import-mode=importlib"
+testpaths = ["tests"]
 
 [dependency-groups]
 dev = [

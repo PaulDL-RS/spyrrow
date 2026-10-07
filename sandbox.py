@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-import spyrrow
+import spyrrow.v0 as spyrrow
 import logging
 
 logging.basicConfig(
@@ -90,7 +90,7 @@ def instance2_res() -> spyrrow.StripPackingSolution:
 
 
 import threading
-import spyrrow
+import spyrrow.v0 as spyrrow
 
 # ... set up instance and config ...
 rectangle1 = spyrrow.Item(

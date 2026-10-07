@@ -1,4 +1,4 @@
-import spyrrow
+import spyrrow.v0 as spyrrow
 import pytest
 import math
 
