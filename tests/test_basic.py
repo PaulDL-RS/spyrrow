@@ -147,5 +147,36 @@ def test_continuous_rotation():
     assert sol.width >= 3.5
     assert sol.width < 4
 
+def test_empty_orientations_means_no_rotation():
+    triangle1 = spyrrow.Item("triangle", [(0, 0), (1, 0), (1, 1), (0, 0)], demand=6, allowed_orientations=[])
+    instance = spyrrow.StripPackingInstance("test", strip_height=2.001, items=[triangle1])
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,seed=0)
+    sol = instance.solve(config)
+    assert all(pi.rotation == pytest.approx(0) for pi in sol.placed_items)
+
+def test_discrete_orientations_are_respected():
+    triangle1 = spyrrow.Item("triangle", [(0, 0), (1, 0), (1, 1), (0, 0)], demand=6, allowed_orientations=[0, 90, 180, -90])
+    instance = spyrrow.StripPackingInstance("test", strip_height=2.001, items=[triangle1])
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,seed=0)
+    sol = instance.solve(config)
+    for pi in sol.placed_items:
+        # angles are returned modulo 360
+        assert any(math.isclose((pi.rotation - a) % 360, 0, abs_tol=1e-3) or math.isclose((pi.rotation - a) % 360, 360, abs_tol=1e-3) for a in [0, 90, 180, -90])
+
+def test_min_items_separation():
+    rectangle1 = spyrrow.Item("rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0])
+    instance = spyrrow.StripPackingInstance("test", strip_height=2.5, items=[rectangle1])
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,min_items_separation=0.2,seed=0)
+    sol = instance.solve(config)
+    # 2 columns of 2 squares, with a gap of at least 0.2 between and around them
+    assert sol.width >= 2.4 - 1e-3
+
+def test_impossible_separation_raises():
+    rectangle1 = spyrrow.Item("rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0])
+    instance = spyrrow.StripPackingInstance("test", strip_height=2.0, items=[rectangle1])
+    config = spyrrow.StripPackingConfig(total_computation_time=10,min_items_separation=5.0,seed=0)
+    with pytest.raises(ValueError):
+        instance.solve(config)
+
 if __name__ == '__main__':
     test_continuous_rotation()
