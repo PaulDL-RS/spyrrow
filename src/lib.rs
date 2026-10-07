@@ -1,9 +1,10 @@
 use jagua_rs::io::ext_repr::{
-    ExtItem as BaseItem, ExtOrientation, ExtRotation, ExtSPolygon, ExtShape,
+    ExtItem as BaseItem, ExtLayout, ExtOrientation, ExtPlacedItem, ExtRotation, ExtSPolygon,
+    ExtShape, ExtTransformation,
 };
 use jagua_rs::io::import::Importer;
 use jagua_rs::probs::spp::entities::SPSolution;
-use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance};
+use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance, ExtSPSolution};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use rand::SeedableRng;
@@ -14,7 +15,7 @@ use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
 use sparrow::consts::{DEFAULT_FAIL_DECAY_RATIO_CMPR, DEFAULT_MAX_CONSEQ_FAILS_EXPL};
 use sparrow::optimizer::optimize;
 use sparrow::util::listener::{DummySolListener, ReportType, SolutionListener};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -450,6 +451,50 @@ impl StripPackingInstancePy {
     }
 }
 
+impl StripPackingInstancePy {
+    // Converts a spyrrow solution back to jagua-rs' external representation.
+    // String ids are mapped to the item index (the external id used by `to_ext_instance`).
+    // Raises a ValueError on an unknown id.
+    fn to_ext_solution(&self, solution: &StripPackingSolutionPy) -> PyResult<ExtSPSolution> {
+        let index_of: HashMap<&str, u64> = self
+            .items
+            .iter()
+            .enumerate()
+            .map(|(idx, item)| (item.id.as_str(), idx as u64))
+            .collect();
+        let placed_items = solution
+            .placed_items
+            .iter()
+            .map(|pi| {
+                let item_id = *index_of.get(pi.id.as_str()).ok_or_else(|| {
+                    PyValueError::new_err(format!(
+                        "The solution places an item with id '{}' which is not an item of the instance",
+                        pi.id
+                    ))
+                })?;
+                Ok(ExtPlacedItem {
+                    item_id,
+                    transformation: ExtTransformation {
+                        reflected: false,
+                        rotation: pi.rotation,
+                        translation: pi.translation,
+                    },
+                })
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(ExtSPSolution {
+            strip_width: solution.width,
+            layout: ExtLayout {
+                container_id: 0,
+                placed_items,
+                density: solution.density,
+            },
+            density: solution.density,
+            run_time_sec: 0,
+        })
+    }
+}
+
 #[pymethods]
 impl StripPackingInstancePy {
     #[new]
@@ -486,16 +531,32 @@ impl StripPackingInstancePy {
     ///     progress (ProgressQueue, optional): If provided, progress reports are pushed to this
     ///       queue during optimization. Use `queue.drain()` from another thread to monitor progress.
     ///       Defaults to None.
+    ///     initial_solution (StripPackingSolution, optional): A solution to warm start from, instead of
+    ///       building one from scratch. Typically the result of a previous `solve` of the same instance.
+    ///       It must place every item exactly `demand` times, using the ids of this instance.
+    ///       Its width is used as the starting strip width, and the solver then tries to shrink it:
+    ///       if the solution is feasible, the returned width is not larger than its width.
+    ///       The strip height is always the one of this instance, and is not checked against the solution:
+    ///       a solution computed for another strip height or another set of items is not meaningful.
+    ///       Neither feasibility nor the compatibility with `min_items_separation` or the allowed orientations is checked:
+    ///       an infeasible or overlapping start is repaired by the solver as part of the exploration, but nothing guarantees it succeeds.
+    ///       Ignored for an instance without items (which must then be given an empty solution).
+    ///       Defaults to None.
     ///
     /// Returns:
     ///     a StripPackingSolution
     ///
     /// Raises:
-    ///     ValueError: If the instance can not be imported by the solver (invalid shape, separation larger than the strip height, ...)
+    ///     ValueError: If the instance can not be imported by the solver (invalid shape, separation larger than the strip height, ...),
+    ///       or if the initial solution is not valid for this instance (unknown item id, item count different from the demand, invalid width, ...)
     ///     RuntimeError: If the solver fails to build an initial solution
     ///
-    #[pyo3(signature = (config, progress=None))]
-    fn solve(&self, config: StripPackingConfigPy, progress: Option<ProgressQueuePy>, py: Python) -> PyResult<StripPackingSolutionPy> {
+    #[pyo3(signature = (config, progress=None, initial_solution=None))]
+    fn solve(&self, config: StripPackingConfigPy, progress: Option<ProgressQueuePy>, initial_solution: Option<StripPackingSolutionPy>, py: Python) -> PyResult<StripPackingSolutionPy> {
+        let ext_initial_solution = initial_solution
+            .as_ref()
+            .map(|s| self.to_ext_solution(s))
+            .transpose()?;
         if self.items.is_empty() {
             return Ok(StripPackingSolutionPy {
                 width: 0.0,
@@ -526,6 +587,25 @@ impl StripPackingInstancePy {
         );
         let instance = jagua_rs::probs::spp::io::import_instance(&importer, &ext_instance)
             .map_err(|e| PyValueError::new_err(format!("Invalid StripPackingInstance: {e:#}")))?;
+        let initial_solution = ext_initial_solution
+            .map(|ext_solution| {
+                let mut counts = vec![0u64; self.items.len()];
+                for pi in &ext_solution.layout.placed_items {
+                    counts[pi.item_id as usize] += 1;
+                }
+                for (item, count) in self.items.iter().zip(&counts) {
+                    if *count != item.demand.get() {
+                        return Err(PyValueError::new_err(format!(
+                            "Invalid initial_solution: item '{}' is placed {} time(s) but its demand is {}",
+                            item.id, count, item.demand
+                        )));
+                    }
+                }
+                jagua_rs::probs::spp::io::import_solution(&instance, &ext_solution).map_err(|e| {
+                    PyValueError::new_err(format!("Invalid initial_solution: {e:#}"))
+                })
+            })
+            .transpose()?;
         let mut terminator = terminator::PythonTerminator::default();
 
         let mut listener = match progress {
@@ -544,7 +624,7 @@ impl StripPackingInstancePy {
                 &mut terminator,
                 &rs_config.expl_cfg,
                 &rs_config.cmpr_cfg,
-                None,
+                initial_solution.as_ref(),
             )
             .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
 
