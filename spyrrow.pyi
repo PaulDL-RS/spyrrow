@@ -201,6 +201,11 @@ class StripPackingInstance:
         Only `min_items_separation` of the configuration is part of the instance;
         the time limits, seed, number of workers, ... are options of the sparrow command line.
 
+        Warning: the solution is exported as is. If `config` has a `min_items_separation` (or the instance a
+        `strip_height`) different from the one the solution was computed with, the exported warm start is
+        infeasible, and the sparrow command line handles an infeasible start poorly (it may run far past its
+        time limit, or return the infeasible layout). Export a solution with the config it was solved with.
+
         Args:
             config (StripPackingConfig, optional): If given, its `min_items_separation` is exported
               as the minimum separation of the instance. Defaults to None, meaning no separation.
