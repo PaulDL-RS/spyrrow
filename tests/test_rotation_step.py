@@ -21,7 +21,7 @@ def is_multiple(angle, step, tol=1e-2):
 
 @pytest.mark.parametrize("step", [90.0, 45.0])
 def test_step_rotations(step):
-    item = spyrrow.Item("r", SQUARE, 5, rotation_step=step)
+    item = spyrrow.Item("r", SQUARE, 5, None, rotation_step=step)
     assert item.allowed_orientations is None
     assert item.rotation_step == step
     sol = solve([item])
@@ -37,7 +37,7 @@ def test_step_360_means_no_rotation():
 
 def test_step_uses_rotation_when_useful():
     # A long bar in a strip too low for it flat: only the 90 degrees rotation fits
-    bar = spyrrow.Item("bar", [(0, 0), (5, 0), (5, 1), (0, 1)], 2, rotation_step=90.0)
+    bar = spyrrow.Item("bar", [(0, 0), (5, 0), (5, 1), (0, 1)], 2, None, rotation_step=90.0)
     sol = solve([bar], height=5.01)
     assert len(sol.placed_items) == 2
     assert all(is_multiple(p.rotation, 90.0) for p in sol.placed_items)
@@ -60,11 +60,11 @@ def test_conflict_raises(orientations):
 
 def test_valid_non_integer_steps():
     for step in [0.5, 1.5, 22.5, 120.0, 180.0, 360.0 / 7.0]:
-        spyrrow.Item("r", SQUARE, 1, rotation_step=step)
+        spyrrow.Item("r", SQUARE, 1, None, rotation_step=step)
 
 
 def test_invalid_set_after_construction_raises_at_solve():
-    item = spyrrow.Item("r", SQUARE, 1, rotation_step=90.0)
+    item = spyrrow.Item("r", SQUARE, 1, None, rotation_step=90.0)
     item.rotation_step = 100.0
     with pytest.raises(ValueError):
         solve([item])
@@ -89,12 +89,18 @@ def test_json_unchanged_without_step():
         '{"id":"r","demand":2,"allowed_orientations":[0.0,90.0],'
         '"shape":[[0.0,0.0],[2.0,0.0],[2.0,1.0],[0.0,1.0]]}'
     )
-    stepped = spyrrow.Item("r", SQUARE, 2, rotation_step=90.0)
+    stepped = spyrrow.Item("r", SQUARE, 2, None, rotation_step=90.0)
     assert json.loads(stepped.to_json_str())["rotation_step"] == 90.0
 
 
 def test_deepcopy_keeps_step():
     import copy
 
-    item = spyrrow.Item("r", SQUARE, 1, rotation_step=45.0)
+    item = spyrrow.Item("r", SQUARE, 1, None, rotation_step=45.0)
     assert copy.deepcopy(item).rotation_step == 45.0
+
+
+def test_allowed_orientations_still_required():
+    # same contract as spyrrow 0.10: allowed_orientations has no default
+    with pytest.raises(TypeError):
+        spyrrow.Item("x", [(0, 0), (1, 0), (1, 1)], 1)
