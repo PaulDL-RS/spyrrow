@@ -41,7 +41,7 @@ const DEFAULT_N_FOCUSSED_SAMPLES: usize = DEFAULT_SPARROW_CONFIG
     .n_focussed_samples;
 const DEFAULT_CD_THRESHOLD: u8 = DEFAULT_SPARROW_CONFIG.cde_config.cd_threshold;
 
-#[pyclass(name = "Item", get_all, set_all)]
+#[pyclass(name = "Item", get_all, set_all, from_py_object)]
 #[derive(Clone, Serialize)]
 /// An Item represents any closed 2D shape by its outer boundary.
 ///
@@ -151,7 +151,7 @@ impl ItemPy {
     }
 }
 
-#[pyclass(name = "PlacedItem", get_all)]
+#[pyclass(name = "PlacedItem", get_all, skip_from_py_object)]
 #[derive(Clone, Debug, Serialize)]
 /// An object representing where a copy of an Item was placed inside the strip.
 ///
@@ -186,7 +186,7 @@ impl PlacedItemPy {
     }
 }
 
-#[pyclass(name = "StripPackingSolution", get_all)]
+#[pyclass(name = "StripPackingSolution", get_all, from_py_object)]
 #[derive(Clone, Debug, Serialize)]
 /// An object representing the solution to a given StripPackingInstance.
 ///
@@ -220,7 +220,7 @@ impl StripPackingSolutionPy {
     }
 }
 
-#[pyclass(name = "ReportType", eq, eq_int)]
+#[pyclass(name = "ReportType", eq, eq_int, skip_from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// The type of progress report emitted by the solver.
 ///
@@ -254,9 +254,6 @@ impl ReportTypePy {
         }
     }
 
-    fn __repr__(&self) -> String {
-        format!("ReportType.{:?}", self)
-    }
 }
 
 impl From<ReportType> for ReportTypePy {
@@ -276,7 +273,7 @@ struct ProgressReport {
     solution: StripPackingSolutionPy,
 }
 
-#[pyclass(name = "OptimizationPhase", eq, eq_int)]
+#[pyclass(name = "OptimizationPhase", eq, eq_int, skip_from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// A phase of the optimization, as announced by a `PhaseEvent`.
 ///
@@ -289,13 +286,6 @@ enum OptimizationPhasePy {
     Compression = 1,
 }
 
-#[pymethods]
-impl OptimizationPhasePy {
-    fn __repr__(&self) -> String {
-        format!("OptimizationPhase.{:?}", self)
-    }
-}
-
 impl From<OptimizationPhase> for OptimizationPhasePy {
     fn from(phase: OptimizationPhase) -> Self {
         match phase {
@@ -305,7 +295,7 @@ impl From<OptimizationPhase> for OptimizationPhasePy {
     }
 }
 
-#[pyclass(name = "PhaseEvent", get_all, frozen)]
+#[pyclass(name = "PhaseEvent", get_all, frozen, skip_from_py_object)]
 #[derive(Clone, Debug)]
 /// The solver entered a new optimization phase.
 ///
@@ -319,11 +309,11 @@ struct PhaseEventPy {
 #[pymethods]
 impl PhaseEventPy {
     fn __repr__(&self) -> String {
-        format!("PhaseEvent(phase={})", self.phase.__repr__())
+        format!("PhaseEvent(phase=OptimizationPhase.{:?})", self.phase)
     }
 }
 
-#[pyclass(name = "SeparationProgressEvent", get_all, frozen)]
+#[pyclass(name = "SeparationProgressEvent", get_all, frozen, skip_from_py_object)]
 #[derive(Clone, Debug)]
 /// Progress of one separation attempt (the solver tries to remove all overlaps at a given strip width).
 ///
@@ -353,7 +343,7 @@ impl SeparationProgressEventPy {
     }
 }
 
-#[pyclass(name = "SeparationResultEvent", get_all, frozen)]
+#[pyclass(name = "SeparationResultEvent", get_all, frozen, skip_from_py_object)]
 #[derive(Clone, Debug)]
 /// Outcome of a finished separation attempt.
 ///
@@ -386,7 +376,7 @@ impl SeparationResultEventPy {
     }
 }
 
-#[pyclass(name = "CompressionProgressEvent", get_all, frozen)]
+#[pyclass(name = "CompressionProgressEvent", get_all, frozen, skip_from_py_object)]
 #[derive(Clone, Debug)]
 /// The compression phase starts a new attempt to shrink the strip.
 ///
@@ -442,7 +432,7 @@ impl EventBuffer {
 
 const DEFAULT_MAX_EVENTS: usize = 10_000;
 
-#[pyclass(name = "ProgressQueue")]
+#[pyclass(name = "ProgressQueue", from_py_object)]
 #[derive(Clone)]
 /// A thread-safe queue that collects progress reports from the solver.
 ///
@@ -519,6 +509,7 @@ impl ProgressQueuePy {
     /// Returns:
     ///     list[PhaseEvent | SeparationProgressEvent | SeparationResultEvent | CompressionProgressEvent]
     ///
+    #[pyo3(signature = () -> "list[PhaseEvent | SeparationProgressEvent | SeparationResultEvent | CompressionProgressEvent]")]
     fn drain_events(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
         let events: Vec<ProgressEvent> = {
             let mut buffer = self.events.lock().unwrap();
@@ -675,12 +666,12 @@ fn all_unique(strings: &[&str]) -> bool {
     strings.iter().all(|s| seen.insert(*s))
 }
 
-#[pyclass(name = "StripPackingConfig", get_all, set_all)]
+#[pyclass(name = "StripPackingConfig", get_all, set_all, from_py_object)]
 #[derive(Clone, Serialize)]
 /// Initializes a configuration object for the strip packing algorithm.
 ///
-/// Either `total_computation_time`, or both `exploration_time` and
-///   `compression_time`, must be provided. Providing all three or only one of the latter two raises an error.
+/// Either `total_computation_time`, or both `exploration_time` and `compression_time`, must be provided.
+/// Providing all three or only one of the latter two raises an error.
 /// If `total_computation_time` is provided, 80% of it is allocated to exploration and 20% to compression.
 /// If `seed` is not provided, a random seed will be generated.
 ///
@@ -897,7 +888,7 @@ impl StripPackingConfigPy {
     }
 }
 
-#[pyclass(name = "StripPackingInstance", get_all, set_all)]
+#[pyclass(name = "StripPackingInstance", get_all, set_all, skip_from_py_object)]
 #[derive(Clone, Serialize)]
 /// An Instance of a Strip Packing Problem.
 ///
@@ -1298,19 +1289,15 @@ impl StripPackingInstancePy {
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn spyrrow(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<ItemPy>()?;
-    m.add_class::<PlacedItemPy>()?;
-    m.add_class::<StripPackingInstancePy>()?;
-    m.add_class::<StripPackingConfigPy>()?;
-    m.add_class::<StripPackingSolutionPy>()?;
-    m.add_class::<ReportTypePy>()?;
-    m.add_class::<OptimizationPhasePy>()?;
-    m.add_class::<PhaseEventPy>()?;
-    m.add_class::<SeparationProgressEventPy>()?;
-    m.add_class::<SeparationResultEventPy>()?;
-    m.add_class::<CompressionProgressEventPy>()?;
-    m.add_class::<ProgressQueuePy>()?;
-    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    Ok(())
+mod spyrrow {
+    #[pymodule_export]
+    use super::{
+        CompressionProgressEventPy, ItemPy, OptimizationPhasePy, PhaseEventPy, PlacedItemPy,
+        ProgressQueuePy, ReportTypePy, SeparationProgressEventPy, SeparationResultEventPy,
+        StripPackingConfigPy, StripPackingInstancePy, StripPackingSolutionPy,
+    };
+
+    #[pymodule_export]
+    #[allow(non_upper_case_globals)]
+    const __version__: &str = env!("CARGO_PKG_VERSION");
 }

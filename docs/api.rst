@@ -1,15 +1,54 @@
 API
 ===
 
-Public API of `spyrrow`
+Public API of `spyrrow`.
 
-.. autoclass:: spyrrow::Item
+Problem definition
+------------------
 
-.. autoclass:: spyrrow::StripPackingInstance
-    :members: solve, to_json_str
+.. autoclass:: spyrrow.Item
+    :members:
 
-.. autoclass:: spyrrow::StripPackingConfig
+.. autoclass:: spyrrow.StripPackingInstance
+    :members:
 
-.. autoclass:: spyrrow::StripPackingSolution
+Configuration
+-------------
 
-.. autoclass:: spyrrow::PlacedItem
+.. autoclass:: spyrrow.StripPackingConfig
+    :members:
+
+Solution
+--------
+
+.. autoclass:: spyrrow.StripPackingSolution
+    :members:
+
+.. autoclass:: spyrrow.PlacedItem
+    :members:
+
+Progress monitoring
+-------------------
+
+.. autoclass:: spyrrow.ProgressQueue
+    :members:
+
+.. autoclass:: spyrrow.ReportType
+    :members:
+
+.. autoclass:: spyrrow.OptimizationPhase
+    :members:
+
+Detailed progress events, returned by :meth:`ProgressQueue.drain_events` for a queue created with ``detailed=True``:
+
+.. autoclass:: spyrrow.PhaseEvent
+    :members:
+
+.. autoclass:: spyrrow.SeparationProgressEvent
+    :members:
+
+.. autoclass:: spyrrow.SeparationResultEvent
+    :members:
+
+.. autoclass:: spyrrow.CompressionProgressEvent
+    :members:

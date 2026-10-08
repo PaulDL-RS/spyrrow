@@ -102,3 +102,19 @@ pytest -n auto -m "not quality"   # hardware independent tests only, as on the e
 ```
 
 New solve tests should call `assert_valid_solution` from `tests/validity.py`, and keep strip width targets in `quality` tests.
+
+### Type stubs and documentation
+
+`spyrrow.pyi` is generated from the Rust sources (signatures, types and `///` docstrings) by PyO3's introspection and maturin, do not edit it by hand:
+
+```bash
+uv run python scripts/generate_stubs.py           # regenerate after changing the Python API
+uv run python scripts/generate_stubs.py --check   # what CI runs
+```
+
+The documentation on [Read the Docs](https://spyrrow.readthedocs.io/) is built from the sources of each version (not from the latest PyPI release), with the same docstrings. To build it locally:
+
+```bash
+uv run maturin develop
+uv run python -m sphinx -W -b html docs docs/_build/html
+```

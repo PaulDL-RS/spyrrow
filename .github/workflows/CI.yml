@@ -307,6 +307,25 @@ jobs:
           pip install pytest-xdist[psutil]
           pytest -n auto
 
+  # spyrrow.pyi is generated from the Rust sources, and the documentation is built from them as on Read the Docs
+  stubs-and-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Type stubs are up to date
+        run: |
+          pip install "maturin>=1.15"
+          python scripts/generate_stubs.py --check
+      - name: Build the documentation (warnings are errors)
+        run: |
+          pip install sphinx
+          MATURIN_PEP517_ARGS="--profile dev" pip install .
+          python -m sphinx -W -b html docs docs/_build/html
+
   sdist:
     runs-on: ubuntu-latest
     steps:
