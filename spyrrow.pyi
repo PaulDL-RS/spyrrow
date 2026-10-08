@@ -117,6 +117,7 @@ class StripPackingConfig:
     quadtree_depth: int
     num_workers:Optional[int]
     min_items_separation: Optional[float]
+    max_evaluations: Optional[int]
 
     def __init__(
         self,
@@ -128,6 +129,7 @@ class StripPackingConfig:
         compression_time: Optional[int] = None,
         num_workers:Optional[int]= None,
         seed: Optional[int] = None,
+        max_evaluations: Optional[int] = None,
     ) -> None:
         """Initializes a configuration object for the strip packing algorithm.
 
@@ -149,9 +151,17 @@ class StripPackingConfig:
             num_workers (Optional[int], optional): Number of threads used by the collision detection engine during exploration.
               When set to None, detect the number of logical CPU cores on the execution plateform. Defaults to None.
             seed (Optional[int], optional): Optional random seed to give reproductibility. If None, a random seed is generated. Defaults to None.
+            max_evaluations (Optional[int], optional): Budget of evaluations (candidate placements evaluated by sparrow), split between
+              exploration and compression in the same proportion as their times. Each phase stops at its budget or its time limit,
+              whichever comes first. The budget is checked after each separation, so a phase can slightly exceed it.
+              Unlike time, the work done for a given budget does not depend on the speed of the machine:
+              with a fixed `seed` and a time limit large enough not to be reached, a run gives the same result on any machine
+              (up to floating point differences between CPU architectures).
+              When set, compression shrinks its steps after failures (as with `early_termination`) instead of over time.
+              Must be strictly positive. Defaults to None (no budget).
 
         Raises:
-            ValueError: If the combination of time arguments is invalid.
+            ValueError: If the combination of time arguments is invalid, or if `max_evaluations` is 0.
 
         """
 

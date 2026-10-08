@@ -4,6 +4,21 @@ import math
 
 from validity import assert_valid_solution
 
+# Quality tests stop on a budget of evaluations rather than on time: with a fixed seed and number of workers,
+# they do the same work and reach the same width on any machine, however fast or loaded.
+# The time limit is only a safety net.
+QUALITY_BUDGET = 5_000_000
+
+
+def quality_config(early_termination: bool = True, max_evaluations: int = QUALITY_BUDGET) -> spyrrow.StripPackingConfig:
+    return spyrrow.StripPackingConfig(
+        early_termination=early_termination,
+        total_computation_time=3600,
+        num_workers=2,
+        seed=0,
+        max_evaluations=max_evaluations,
+    )
+
 @pytest.mark.quality
 def test_basic():
     rectangle1 = spyrrow.Item(
@@ -19,7 +34,7 @@ def test_basic():
     instance = spyrrow.StripPackingInstance(
         "test", strip_height=2.001, items=[rectangle1, triangle1]
     )
-    config = spyrrow.StripPackingConfig(early_termination=False,total_computation_time=90,num_workers=3,seed=0)
+    config = quality_config(early_termination=False)
     sol = instance.solve(config)
     assert_valid_solution(instance, sol)
     assert sol.width == pytest.approx(4,rel=0.05)
@@ -39,7 +54,7 @@ def test_early_termination():
     instance = spyrrow.StripPackingInstance(
         "test", strip_height=2.001, items=[rectangle1, triangle1]
     )
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=600,num_workers=3,seed=0)
+    config = quality_config()
     sol = instance.solve(config)
     assert_valid_solution(instance, sol)
     assert sol.width == pytest.approx(4,rel=0.05)
@@ -82,7 +97,7 @@ def test_one_item():
     instance = spyrrow.StripPackingInstance(
         "test", strip_height=2.001, items=[triangle1]
     )
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,num_workers=3,seed=0)
+    config = quality_config()
     sol = instance.solve(config)
     assert_valid_solution(instance, sol)
     assert sol.width == pytest.approx(1,rel=0.05)
@@ -99,7 +114,7 @@ def test_one_demand():
     instance = spyrrow.StripPackingInstance(
         "test", strip_height=2.001, items=[triangle1]
     )
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,num_workers=3,seed=0)
+    config = quality_config()
     sol = instance.solve(config)
     assert_valid_solution(instance, sol)
     assert sol.width == pytest.approx(math.cos(math.radians(45)),rel=0.05)
@@ -122,10 +137,10 @@ def test_2_consecutive_calls():
     instance = spyrrow.StripPackingInstance(
         "test", strip_height=2.001, items=[rectangle1, triangle1]
     )
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,seed=0)
+    config = quality_config(max_evaluations=1_000_000)
     sol = instance.solve(config)
     assert_valid_solution(instance, sol)
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,seed=0)
+    config = quality_config()
     sol = instance.solve(config)
     assert_valid_solution(instance, sol)
     assert sol.width == pytest.approx(4,rel=0.05)
@@ -156,7 +171,7 @@ def test_continuous_rotation():
     instance = spyrrow.StripPackingInstance(
         "test", strip_height=2.001, items=[rectangle1, triangle1]
     )
-    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,seed=0)
+    config = quality_config()
     sol = instance.solve(config)
     assert_valid_solution(instance, sol)
     print(sol.width)
