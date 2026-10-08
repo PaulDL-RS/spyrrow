@@ -30,7 +30,7 @@ def test_step_rotations(step):
 
 
 def test_step_360_means_no_rotation():
-    item = spyrrow.Item("r", SQUARE, 3, None, 360.0)
+    item = spyrrow.Item("r", SQUARE, 3, None, rotation_step=360.0)
     sol = solve([item])
     assert all(is_multiple(p.rotation, 360.0) for p in sol.placed_items)
 
@@ -104,3 +104,13 @@ def test_allowed_orientations_still_required():
     # same contract as spyrrow 0.10: allowed_orientations has no default
     with pytest.raises(TypeError):
         spyrrow.Item("x", [(0, 0), (1, 0), (1, 1)], 1)
+
+
+def test_rotation_step_with_reflection_axis():
+    # jagua-rs composes a reflection with stepped rotations: reflected placements are reported with r + 2 * axis
+    item = spyrrow.Item("r", SQUARE, 4, None, reflection_axis=0.0, rotation_step=90.0)
+    instance = spyrrow.StripPackingInstance("test", strip_height=2.001, items=[item])
+    sol = instance.solve(spyrrow.StripPackingConfig(early_termination=True, total_computation_time=5, num_workers=2, seed=0))
+    assert len(sol.placed_items) == 4
+    for pi in sol.placed_items:
+        assert is_multiple(pi.rotation, 90.0)

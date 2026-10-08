@@ -13,9 +13,10 @@ use sparrow::EPOCH;
 use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
 use sparrow::consts::{DEFAULT_FAIL_DECAY_RATIO_CMPR, DEFAULT_MAX_CONSEQ_FAILS_EXPL};
 use sparrow::optimizer::optimize;
-use sparrow::util::listener::{DummySolListener, ReportType, SolutionListener};
+use sparrow::util::listener::{ReportType, SeparationResult, SolutionListener};
 use std::collections::{HashSet, VecDeque};
 use std::num::NonZeroU64;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -38,13 +39,22 @@ mod terminator;
 ///       An empty Sequence is equivalent to [0.].
 ///       A None value means that the item is free to rotate
 ///       The algorithmn is only very weakly sensible to the length of the Sequence given.
+///     reflection_axis (float|None): Angle in degrees, from the x axis, of an axis across which the Item may be mirrored. Defaults to None.
+///       None means that the Item is never reflected.
+///       When set, the solver is free to place the Item either as is or mirrored across this axis (it is not forced to mirror).
+///       The axis is taken modulo 180° and is expressed in the Item's own coordinate system, before any rotation.
+///       The rotations allowed (see `allowed_orientations`) are applied after the reflection.
+///       For instance, with `allowed_orientations=[]` and `reflection_axis=0.`, the Item can only be mirrored across its x axis.
+///       Mirrored placements are reported by `PlacedItem.reflected`.
+///       Note: the sparrow version bundled (0.3.0) only samples the non-reflected orientations, so the solver currently never returns a reflected placement.
+///       The axis is still imported and validated by the underlying jagua-rs, and will take effect once the solver explores reflections.
 ///     rotation_step (float|None): Angle in degrees of a regular rotation step. Defaults to None.
 ///       The Item is then allowed the angles 0, step, 2*step, ... below 360°.
 ///       Must be in (0, 360] and evenly divide 360° (e.g. 90., 45., 60., 360.). 360. means no rotation.
 ///       Can only be used with `allowed_orientations=None`.
 ///
 /// Raises:
-///     ValueError: If both `allowed_orientations` and `rotation_step` are provided, or if `rotation_step` is not a valid step.
+///     ValueError: If `reflection_axis` is not finite, if both `allowed_orientations` and `rotation_step` are provided, or if `rotation_step` is not a valid step.
 ///       The attributes can also be set after construction. In this case, the same checks are done by `StripPackingInstance.solve`.
 ///
 struct ItemPy {
@@ -52,6 +62,9 @@ struct ItemPy {
     demand: NonZeroU64,
     allowed_orientations: Option<Vec<f32>>,
     shape: Vec<(f32, f32)>,
+    // Omitted from the JSON when None, to keep the output of items without reflection unchanged
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reflection_axis: Option<f32>,
     // Omitted from the JSON when None, to keep the output of items without rotation step unchanged
     #[serde(skip_serializing_if = "Option::is_none")]
     rotation_step: Option<f32>,
@@ -60,20 +73,29 @@ struct ItemPy {
 #[pymethods]
 impl ItemPy {
     #[new]
-    #[pyo3(signature = (id, shape, demand, allowed_orientations, rotation_step=None))]
+    #[pyo3(signature = (id, shape, demand, allowed_orientations, reflection_axis=None, rotation_step=None))]
     fn new(
         id: String,
         shape: Vec<(f32, f32)>,
         demand: NonZeroU64,
         allowed_orientations: Option<Vec<f32>>,
+        reflection_axis: Option<f32>,
         rotation_step: Option<f32>,
     ) -> PyResult<Self> {
+        if let Some(axis) = reflection_axis
+            && !axis.is_finite()
+        {
+            return Err(PyValueError::new_err(format!(
+                "reflection_axis must be finite, got {axis}"
+            )));
+        }
         to_ext_rotation(&allowed_orientations, rotation_step)?;
         Ok(ItemPy {
             id,
             demand,
             allowed_orientations,
             shape,
+            reflection_axis,
             rotation_step,
         })
     }
@@ -85,6 +107,9 @@ impl ItemPy {
         );
         if let Some(orientations) = &self.allowed_orientations {
             repr.push_str(&format!(", allowed_orientations={:?}", orientations));
+        }
+        if let Some(axis) = self.reflection_axis {
+            repr.push_str(&format!(", reflection_axis={:?}", axis));
         }
         if let Some(step) = self.rotation_step {
             repr.push_str(&format!(", rotation_step={:?}", step));
@@ -116,12 +141,22 @@ impl ItemPy {
 ///     rotation (float): The rotation angle in degrees, assuming that the original Item was defined with 0° as its rotation angle.
 ///       Use the origin (0.0,0.0) as the rotation point.
 ///     translation (tuple[float,float]): the translation vector in the X-Y axis. To apply after the rotation
-///       
+///     reflected (bool): Whether the Item is mirrored in this placement. False for Items without a `reflection_axis`.
+///
+/// The placed shape is obtained from the original Item shape by applying, in this order:
+///
+///     1. if `reflected`, the mirroring (x, y) -> (x, -y)
+///     2. the rotation by `rotation` degrees (counter-clockwise), around the origin (0.0,0.0)
+///     3. the translation by `translation`
+///
+/// Since mirroring across an axis at angle `a` is the mirroring (x, y) -> (x, -y) followed by a rotation of `2*a`,
+/// the `rotation` of a reflected placement includes this `2*a` term (modulo 360°).
 ///
 struct PlacedItemPy {
     pub id: String,
     pub translation: (f32, f32),
     pub rotation: f32,
+    pub reflected: bool,
 }
 
 #[pymethods]
@@ -270,6 +305,7 @@ impl SolutionListener for ProgressListener {
                 id: self.item_ids[jpi.item_id as usize].clone(),
                 rotation: jpi.transformation.rotation,
                 translation: jpi.transformation.translation,
+                reflected: jpi.transformation.reflected,
             })
             .collect();
         let mut queue = self.queue.lock().unwrap();
@@ -284,19 +320,35 @@ impl SolutionListener for ProgressListener {
     }
 }
 
-// Enum wrapper to avoid duplicating the optimize() call in solve().
-enum SolListener {
-    Dummy(DummySolListener),
-    Progress(ProgressListener),
+// Listener given to optimize(): forwards reports to the optional progress queue,
+// and counts the evaluations for the evaluation budget of the terminator.
+struct SolListener {
+    progress: Option<ProgressListener>,
+    evals: Arc<AtomicU64>,
 }
 
 impl SolutionListener for SolListener {
     fn report(&mut self, report: ReportType, solution: &SPSolution) {
-        match self {
-            SolListener::Dummy(d) => d.report(report, solution),
-            SolListener::Progress(p) => p.report(report, solution),
+        if let Some(p) = self.progress.as_mut() {
+            p.report(report, solution);
         }
     }
+
+    fn report_separation_result(&mut self, result: SeparationResult) {
+        self.evals.fetch_add(result.total_evals as u64, Ordering::Relaxed);
+    }
+}
+
+// Splits the evaluation budget between exploration and compression like their times.
+fn split_budget(budget: u64, exploration_time: Duration, compression_time: Duration) -> [u64; 2] {
+    let total = exploration_time + compression_time;
+    let exploration_ratio = if total.is_zero() {
+        0.8
+    } else {
+        exploration_time.as_secs_f64() / total.as_secs_f64()
+    };
+    let exploration = (budget as f64 * exploration_ratio).round() as u64;
+    [exploration, budget - exploration]
 }
 
 fn all_unique(strings: &[&str]) -> bool {
@@ -326,9 +378,17 @@ fn all_unique(strings: &[&str]) -> bool {
 ///     num_workers (Optional[int], optional): Number of threads used by the collision detection engine during exploration.
 ///       When set to None, detect the number of logical CPU cores on the execution plateform. Defaults to None.
 ///     seed (Optional[int], optional): Optional random seed to give reproductibility. If None, a random seed is generated. Defaults to None.
+///     max_evaluations (Optional[int], optional): Budget of evaluations (candidate placements evaluated by sparrow), split between
+///       exploration and compression in the same proportion as their times. Each phase stops at its budget or its time limit,
+///       whichever comes first. The budget is checked after each separation, so a phase can slightly exceed it.
+///       Unlike time, the work done for a given budget does not depend on the speed of the machine:
+///       with a fixed `seed` and a time limit large enough not to be reached, a run gives the same result on any machine
+///       (up to floating point differences between CPU architectures).
+///       When set, compression shrinks its steps after failures (as with `early_termination`) instead of over time.
+///       Must be strictly positive. Defaults to None (no budget).
 ///
 /// Raises:
-///     ValueError: If the combination of time arguments is invalid.
+///     ValueError: If the combination of time arguments is invalid, or if `max_evaluations` is 0.
 ///
 struct StripPackingConfigPy {
     early_termination: bool,
@@ -338,12 +398,14 @@ struct StripPackingConfigPy {
     quadtree_depth: u8,
     min_items_separation: Option<f32>,
     num_workers: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_evaluations: Option<NonZeroU64>,
 }
 
 #[pymethods]
 impl StripPackingConfigPy {
     #[new]
-    #[pyo3(signature = (early_termination=true,quadtree_depth=4,min_items_separation=None,total_computation_time=600,exploration_time=None,compression_time=None,num_workers=None,seed=None))]
+    #[pyo3(signature = (early_termination=true,quadtree_depth=4,min_items_separation=None,total_computation_time=600,exploration_time=None,compression_time=None,num_workers=None,seed=None,max_evaluations=None))]
     fn new(
         early_termination: bool,
         quadtree_depth: u8,
@@ -353,6 +415,7 @@ impl StripPackingConfigPy {
         compression_time: Option<u64>,
         num_workers: Option<usize>,
         seed: Option<u64>,
+        max_evaluations: Option<NonZeroU64>,
     ) -> PyResult<Self> {
         let (exploration_time, compression_time) = match (
             total_computation_time,
@@ -383,6 +446,7 @@ impl StripPackingConfigPy {
             quadtree_depth,
             num_workers,
             min_items_separation,
+            max_evaluations,
         })
     }
 
@@ -455,13 +519,15 @@ fn to_ext_rotation(
     }
 }
 
+// The optional reflection axis is given as is, jagua-rs normalizes it.
 fn to_ext_orientation(
     allowed_orientations: &Option<Vec<f32>>,
     rotation_step: Option<f32>,
+    reflection_axis: Option<f32>,
 ) -> PyResult<ExtOrientation> {
     Ok(ExtOrientation {
         rotation: to_ext_rotation(allowed_orientations, rotation_step)?,
-        reflection_axes: Vec::new(),
+        reflection_axes: reflection_axis.into_iter().collect(),
     })
 }
 
@@ -472,7 +538,7 @@ impl StripPackingInstancePy {
             .iter()
             .enumerate()
             .map(|(idx, v)| {
-                let orientation = to_ext_orientation(&v.allowed_orientations, v.rotation_step)
+                let orientation = to_ext_orientation(&v.allowed_orientations, v.rotation_step, v.reflection_axis)
                     .map_err(|e| {
                         PyValueError::new_err(format!("Invalid Item '{}': {}", v.id, e.value(py)))
                     })?;
@@ -564,6 +630,11 @@ impl StripPackingInstancePy {
             rs_config.cmpr_cfg.shrink_decay =
                 ShrinkDecayStrategy::FailureBased(DEFAULT_FAIL_DECAY_RATIO_CMPR);
         }
+        if config.max_evaluations.is_some() {
+            // The time based decay would barely move under a time limit that is only a safety net
+            rs_config.cmpr_cfg.shrink_decay =
+                ShrinkDecayStrategy::FailureBased(DEFAULT_FAIL_DECAY_RATIO_CMPR);
+        }
         rs_config.cde_config.quadtree_depth = config.quadtree_depth;
 
         let ext_instance = self.to_ext_instance(py, config.min_items_separation)?;
@@ -575,14 +646,21 @@ impl StripPackingInstancePy {
         );
         let instance = jagua_rs::probs::spp::io::import_instance(&importer, &ext_instance)
             .map_err(|e| PyValueError::new_err(format!("Invalid StripPackingInstance: {e:#}")))?;
+        let evals = Arc::new(AtomicU64::new(0));
         let mut terminator = terminator::PythonTerminator::default();
+        terminator.eval_budget = config.max_evaluations.map(|budget| {
+            terminator::EvalBudget::new(
+                evals.clone(),
+                split_budget(budget.get(), config.exploration_time, config.compression_time),
+            )
+        });
 
-        let mut listener = match progress {
-            Some(pq) => SolListener::Progress(ProgressListener {
+        let mut listener = SolListener {
+            progress: progress.map(|pq| ProgressListener {
                 queue: pq.inner,
                 item_ids: self.items.iter().map(|i| i.id.clone()).collect(),
             }),
-            None => SolListener::Dummy(DummySolListener {}),
+            evals,
         };
 
         py.detach(move || {
@@ -607,6 +685,7 @@ impl StripPackingInstancePy {
                     id: self.items[jpi.item_id as usize].id.clone(),
                     rotation: jpi.transformation.rotation, // This is in degrees already now
                     translation: jpi.transformation.translation,
+                    reflected: jpi.transformation.reflected,
                 })
                 .collect();
 
