@@ -15,6 +15,7 @@ use sparrow::config::{DEFAULT_SPARROW_CONFIG, ShrinkDecayStrategy};
 use sparrow::consts::{DEFAULT_FAIL_DECAY_RATIO_CMPR, DEFAULT_MAX_CONSEQ_FAILS_EXPL};
 use sparrow::optimizer::optimize;
 use sparrow::quantify::tracker::CollisionTracker;
+use sparrow::util::io::ExtSPOutput;
 use sparrow::util::listener::{ReportType, SeparationResult, SolutionListener};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::NonZeroU64;
@@ -135,7 +136,7 @@ impl ItemPy {
 }
 
 #[pyclass(name = "PlacedItem", get_all)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 /// An object representing where a copy of an Item was placed inside the strip.
 ///
 /// Attributes:
@@ -170,7 +171,7 @@ impl PlacedItemPy {
 }
 
 #[pyclass(name = "StripPackingSolution", get_all)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 /// An object representing the solution to a given StripPackingInstance.
 ///
 /// Can not be directly instanciated. Result from StripPackingInstance.solve.
@@ -191,6 +192,15 @@ impl StripPackingSolutionPy {
 
     fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
         self.clone()
+    }
+
+    /// Return a string of the JSON representation of the object
+    ///
+    /// Returns:
+    ///     str
+    ///
+    fn to_json_str(&self) -> String {
+        serde_json::to_string(&self).unwrap()
     }
 }
 
@@ -611,6 +621,7 @@ impl StripPackingInstancePy {
     }
 }
 
+
 #[pymethods]
 impl StripPackingInstancePy {
     #[new]
@@ -638,6 +649,51 @@ impl StripPackingInstancePy {
 
     fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
         self.clone()
+    }
+
+    /// Return a JSON string in the input format of the sparrow command line tool (and Sparrow Studio),
+    /// to reproduce or debug a spyrrow run outside of Python.
+    ///
+    /// Without `solution`, the result is an instance file, to be given to `sparrow -i`.
+    /// With `solution`, the instance and the solution are put in a single document (the format of
+    /// the output of sparrow), which `sparrow -i` uses as a warm start.
+    /// Items are identified by their index in `items` (the string ids are not exported).
+    /// Only `min_items_separation` of the configuration is part of the instance;
+    /// the time limits, seed, number of workers, ... are options of the sparrow command line.
+    ///
+    /// Warning: the solution is exported as is. If `config` has a `min_items_separation` (or the instance a
+    /// `strip_height`) different from the one the solution was computed with, the exported warm start is
+    /// infeasible, and the sparrow command line handles an infeasible start poorly (it may run far past its
+    /// time limit, or return the infeasible layout). Export a solution with the config it was solved with.
+    ///
+    /// Args:
+    ///     config (StripPackingConfig, optional): If given, its `min_items_separation` is exported
+    ///       as the minimum separation of the instance. Defaults to None, meaning no separation.
+    ///     solution (StripPackingSolution, optional): A solution of this instance to export along with it.
+    ///       Defaults to None.
+    ///
+    /// Returns:
+    ///     str
+    ///
+    /// Raises:
+    ///     ValueError: If the solution places an item which is not an item of the instance.
+    ///
+    #[pyo3(signature = (config=None, solution=None))]
+    fn to_sparrow_json_str(
+        &self,
+        py: Python,
+        config: Option<StripPackingConfigPy>,
+        solution: Option<StripPackingSolutionPy>,
+    ) -> PyResult<String> {
+        let ext_instance = self.to_ext_instance(py, config.and_then(|c| c.min_items_separation))?;
+        let json = match solution {
+            None => serde_json::to_string(&ext_instance),
+            Some(solution) => serde_json::to_string(&ExtSPOutput {
+                instance: ext_instance,
+                solution: self.to_ext_solution(&solution)?,
+            }),
+        };
+        json.map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
     }
 
     /// The method to solve the instance.

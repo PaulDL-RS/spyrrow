@@ -1,3 +1,8 @@
+"""Pydantic models of the sparrow JSON instance format, to validate it.
+
+Note: `StripPackingInstance.to_sparrow_json_str()` now exports an instance directly in this format
+(and, with a solution, in the format accepted by `sparrow -i` for warm starting).
+"""
 from typing import Literal, Self
 
 from pydantic import BaseModel, Field, PositiveFloat, PositiveInt, field_validator
