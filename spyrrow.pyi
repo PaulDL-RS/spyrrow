@@ -126,21 +126,122 @@ class ReportType(enum.IntEnum):
             One of "exploring", "compressing", or "final".
         """
 
+class OptimizationPhase(enum.IntEnum):
+    """A phase of the optimization, as announced by a `PhaseEvent`.
+
+    Attributes:
+        Exploration: The solver is searching for a feasible strip width.
+        Compression: The solver is squeezing the best feasible solution.
+    """
+    Exploration = 0
+    Compression = 1
+
+class PhaseEvent:
+    """The solver entered a new optimization phase.
+
+    Attributes:
+        phase: the phase that just started.
+    """
+    phase: OptimizationPhase
+
+class SeparationProgressEvent:
+    """Progress of one separation attempt (the solver tries to remove all overlaps at a given strip width).
+
+    Emitted once for the initial layout (`iteration == 0`), then after each completed iteration.
+    This is a high-frequency event.
+
+    Attributes:
+        strip_width: the strip width being separated.
+        density: the density of the layout, as a fraction in [0, 1] (same convention as `StripPackingSolution.density`).
+        iteration: the iteration counter within the separation attempt.
+        min_loss: the lowest overlap loss found so far in this attempt; 0.0 means the layout is feasible.
+    """
+    strip_width: float
+    density: float
+    iteration: int
+    min_loss: float
+
+class SeparationResultEvent:
+    """Outcome of a finished separation attempt.
+
+    Attributes:
+        success: whether all overlaps were removed.
+        elapsed_seconds: wall-clock duration of the attempt.
+        total_evals: number of placement evaluations performed.
+        total_moves: number of item moves performed.
+        iterations: number of iterations performed.
+    """
+    success: bool
+    elapsed_seconds: float
+    total_evals: int
+    total_moves: int
+    iterations: int
+
+class CompressionProgressEvent:
+    """The compression phase starts a new attempt to shrink the strip.
+
+    Attributes:
+        shrink_step: the relative shrink of the strip width attempted (0.001 means 0.1%).
+    """
+    shrink_step: float
+
+ProgressEvent: TypeAlias = (
+    PhaseEvent | SeparationProgressEvent | SeparationResultEvent | CompressionProgressEvent
+)
+
 class ProgressQueue:
     """A thread-safe queue that collects progress reports from the solver.
 
     Create one before calling `solve()` and pass it as the `progress` argument.
     While the solver runs (in a background thread), call `drain()` to retrieve
     any new reports.
+
+    With `detailed=True`, the queue additionally records fine-grained solver events
+    (phase changes, separation progress, compression attempts), retrieved with `drain_events()`.
+    These are kept apart from `drain()`, which is never affected by `detailed`.
+    Separation progress events are high-frequency (one per solver iteration, typically
+    hundreds to thousands per second), so the event buffer is bounded: when it holds
+    `max_events` events, the oldest one is dropped to make room. Call `drain_events()`
+    regularly to avoid losing events; `dropped_events` counts what was lost.
+    The reports retrieved by `drain()` are not bounded.
+
+    Example::
+
+        queue = spyrrow.ProgressQueue(detailed=True)
+        # run solve in a thread, passing progress=queue
+        for report_type, solution in queue.drain():
+            print(f"{report_type.phase_name()}: width={solution.width:.1f}")
+        for event in queue.drain_events():
+            if isinstance(event, spyrrow.PhaseEvent):
+                print(f"entered {event.phase}")
     """
 
-    def __init__(self) -> None: ...
+    detailed: bool
+    max_events: int
+    dropped_events: int
+
+    def __init__(self, detailed: bool = False, max_events: int = 10000) -> None:
+        """
+        Args:
+            detailed: Whether to also record fine-grained events. Defaults to False.
+            max_events: Capacity of the event buffer. Must be strictly positive.
+              Only used if `detailed` is True. Defaults to 10000.
+
+        Raises:
+            ValueError: If `max_events` is zero.
+        """
 
     def drain(self) -> list[tuple[ReportType, StripPackingSolution]]:
         """Drain all pending progress reports from the queue.
 
         Returns:
             A list of (report_type, solution) tuples.
+        """
+
+    def drain_events(self) -> list[ProgressEvent]:
+        """Drain all pending detailed events from the queue, oldest first.
+
+        Always empty if the queue was not created with `detailed=True`.
         """
 
 class StripPackingConfig:
@@ -269,7 +370,8 @@ class StripPackingInstance:
         Args:
             config (StripPackingConfig): The configuration object to control how the instance is solved.
             progress (ProgressQueue, optional): If provided, progress reports are pushed to this
-              queue during optimization. Use `queue.drain()` from another thread to monitor progress.
+              queue during optimization. Use `queue.drain()` (and `queue.drain_events()` for a detailed queue)
+              from another thread to monitor progress.
               Defaults to None.
             initial_solution (StripPackingSolution, optional): A solution to warm start from, instead of
               building one from scratch. Typically the result of a previous `solve` of the same instance.
