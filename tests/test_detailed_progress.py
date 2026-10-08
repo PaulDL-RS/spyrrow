@@ -100,3 +100,18 @@ def test_event_reprs():
     make_instance().solve(make_config(), queue)
     for event in queue.drain_events():
         assert type(event).__name__ in repr(event)
+
+
+def test_detailed_queue_does_not_change_budgeted_run():
+    # The listener counts evaluations for max_evaluations and forwards events: both must coexist
+    def solve(progress):
+        config = spyrrow.StripPackingConfig(total_computation_time=3600, num_workers=2, seed=0, max_evaluations=50_000)
+        return make_instance().solve(config, progress=progress)
+
+    queue = spyrrow.ProgressQueue(detailed=True)
+    with_events = solve(queue)
+    without = solve(None)
+    assert any(isinstance(e, spyrrow.SeparationResultEvent) for e in queue.drain_events())
+    assert sorted((p.id, p.translation, p.rotation) for p in with_events.placed_items) == sorted(
+        (p.id, p.translation, p.rotation) for p in without.placed_items
+    )
