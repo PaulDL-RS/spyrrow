@@ -3,6 +3,12 @@ import json
 import pytest
 import spyrrow
 
+from validity import assert_valid_solution
+
+# Runs compared for equality stop on a budget of evaluations, not on the clock,
+# so that they do the same work on any machine, however slow or loaded (emulated CI runners included).
+BUDGET = dict(total_computation_time=3600, max_evaluations=200_000)
+
 OLD_KEYS = {
     "early_termination",
     "seed",
@@ -71,10 +77,8 @@ def test_json_is_additive():
 
 
 def test_explicit_defaults_reproduce_implicit_defaults():
-    # Tiny instance with early termination: the run ends on its own criteria, not on the clock,
-    # so with a fixed seed and a single worker it is reproducible.
     instance = make_instance()
-    kwargs = dict(total_computation_time=5, num_workers=1, seed=42)
+    kwargs = dict(**BUDGET, num_workers=1, seed=42)
     implicit = instance.solve(spyrrow.StripPackingConfig(**kwargs))
     implicit_again = instance.solve(spyrrow.StripPackingConfig(**kwargs))
     explicit = instance.solve(
@@ -98,7 +102,7 @@ def test_explicit_defaults_reproduce_implicit_defaults():
 def test_early_termination_values_are_the_implicit_ones():
     # max_conseq_failed_attempts=10 and decay ratio 0.9 are what early_termination=True implies
     instance = make_instance()
-    kwargs = dict(total_computation_time=5, num_workers=1, seed=7)
+    kwargs = dict(**BUDGET, num_workers=1, seed=7)
     implicit = instance.solve(spyrrow.StripPackingConfig(**kwargs))
     explicit = instance.solve(
         spyrrow.StripPackingConfig(
@@ -108,31 +112,50 @@ def test_early_termination_values_are_the_implicit_ones():
     assert signature(explicit) == signature(implicit)
 
 
+def exploration_evaluations(queue):
+    phase, evaluations = None, 0
+    for event in queue.drain_events():
+        if isinstance(event, spyrrow.PhaseEvent):
+            phase = event.phase
+        elif isinstance(event, spyrrow.SeparationResultEvent) and phase == spyrrow.OptimizationPhase.Exploration:
+            evaluations += event.total_evals
+    assert queue.dropped_events == 0
+    return evaluations
+
+
 @pytest.mark.parametrize("early_termination", [True, False])
 def test_explicit_max_conseq_failed_attempts_stops_exploration(early_termination):
-    # With a 10 s budget exploration gets 8 s. An explicit limit of 1 must end it much sooner,
+    # An explicit limit of 1 must end exploration much sooner than its share of the budget,
     # whatever early_termination says (it never raises the limit, and with False it adds one).
-    import time
-
+    # Measured in evaluations rather than seconds, to be independent of the machine.
     instance = make_instance()
-    config = spyrrow.StripPackingConfig(
-        total_computation_time=10,
-        num_workers=1,
-        seed=3,
-        early_termination=early_termination,
-        max_conseq_failed_attempts=1,
-    )
-    queue = spyrrow.ProgressQueue()
-    start = time.time()
-    instance.solve(config, queue)
-    assert time.time() - start < 7.5
-    assert sum(1 for rt, _ in queue.drain() if rt == spyrrow.ReportType.ExplInfeas) <= 1
+
+    def explore(**kwargs):
+        config = spyrrow.StripPackingConfig(
+            total_computation_time=3600,
+            max_evaluations=2_000_000,
+            num_workers=1,
+            seed=3,
+            early_termination=early_termination,
+            **kwargs,
+        )
+        queue = spyrrow.ProgressQueue(detailed=True, max_events=10_000_000)
+        instance.solve(config, queue)
+        reports = queue.drain()
+        return exploration_evaluations(queue), reports
+
+    limited, reports = explore(max_conseq_failed_attempts=1)
+    unlimited, _ = explore()
+    assert limited < unlimited / 2
+    assert sum(1 for rt, _ in reports if rt == spyrrow.ReportType.ExplInfeas) <= 1
 
 
+@pytest.mark.quality
 def test_non_default_values_run():
     instance = make_instance()
     config = spyrrow.StripPackingConfig(
-        total_computation_time=5,
+        total_computation_time=3600,
+        max_evaluations=1_000_000,
         num_workers=2,
         seed=1,
         narrow_concavity_cutoff=(0.01, 0.01),
@@ -146,7 +169,7 @@ def test_non_default_values_run():
         cd_threshold=32,
     )
     sol = instance.solve(config)
-    assert len(sol.placed_items) == 10
+    assert_valid_solution(instance, sol)
     assert sol.width == pytest.approx(4, rel=0.15)
 
 
