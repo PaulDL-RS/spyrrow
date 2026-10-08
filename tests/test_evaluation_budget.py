@@ -21,7 +21,7 @@ def make_instance():
     )
 
 
-def budget_config(max_evaluations=300_000, **kwargs):
+def budget_config(max_evaluations=50_000, **kwargs):
     return spyrrow.StripPackingConfig(total_computation_time=3600, num_workers=2, seed=0, max_evaluations=max_evaluations, **kwargs)
 
 
