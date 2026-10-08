@@ -29,3 +29,8 @@ dev = [
     "ruff",
     "sphinx>=8.1.3",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "quality: asserts how good a solution is (strip width). Depends on the speed of the machine, deselected on emulated CI runners with -m 'not quality'",
+]
