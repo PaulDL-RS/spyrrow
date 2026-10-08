@@ -194,4 +194,8 @@ class StripPackingInstance:
 
         Returns:
             a StripPackingSolution
+
+        Raises:
+            ValueError: If the instance can not be imported by the solver (invalid shape, separation larger than the strip height, ...)
+            RuntimeError: If the solver fails to build an initial solution
         """

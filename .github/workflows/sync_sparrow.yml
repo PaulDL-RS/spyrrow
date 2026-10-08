@@ -16,29 +16,69 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Get latest sparrow rev
         id: rev
         run: |
           NEW=$(git ls-remote https://github.com/JeroenGar/sparrow.git HEAD | cut -f1)
-          OLD=$(grep -oP 'sparrow.*?rev\s*=\s*"\K[a-f0-9]+' Cargo.toml)
+          OLD=$(grep -oP '^sparrow.*?rev\s*=\s*"\K[a-f0-9]+' Cargo.toml)
           echo "new=$NEW" >> "$GITHUB_OUTPUT"
           echo "old=$OLD" >> "$GITHUB_OUTPUT"
           echo "changed=$( [ "$NEW" != "$OLD" ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
 
       - name: Update Cargo.toml
         if: steps.rev.outputs.changed == 'true'
-        run: python scripts/sync_sparrow.py
+        run: python scripts/sync_sparrow.py --rev ${{ steps.rev.outputs.new }}
 
-      - name: Build check
+      - uses: dtolnay/rust-toolchain@stable
         if: steps.rev.outputs.changed == 'true'
-        run: cargo check --lib
+
+      # Upstream API changes are expected: a failing build still opens a (draft) PR
+      # so that the breakage is visible, instead of silently failing every day.
+      - name: Build check
+        id: check
+        if: steps.rev.outputs.changed == 'true'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          cargo check --lib 2>&1 | tee cargo_check.log
+
+      - name: Summarize build errors
+        id: errors
+        if: steps.rev.outputs.changed == 'true' && steps.check.outcome == 'failure'
+        run: |
+          {
+            echo 'errors<<EOF'
+            grep -E '^error' -A12 cargo_check.log | head -c 50000
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Cleanup
+        if: steps.rev.outputs.changed == 'true'
+        run: rm -f cargo_check.log
 
       - name: Open PR
         if: steps.rev.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
+          # GITHUB_TOKEN can only open PRs if "Allow GitHub Actions to create and approve pull requests"
+          # is enabled in the repository settings, and PRs it opens do not trigger the CI workflow.
+          # Set a SYNC_PR_TOKEN secret (fine-grained PAT: contents + pull-requests write) to avoid both.
+          token: ${{ secrets.SYNC_PR_TOKEN || github.token }}
           branch: auto/sync-sparrow
+          delete-branch: true
+          draft: ${{ steps.check.outcome == 'failure' }}
           title: "chore: sync sparrow ${{ steps.rev.outputs.new }}"
           body: |
-            Auto-update from `${{ steps.rev.outputs.old }}` → `${{ steps.rev.outputs.new }}`
+            Auto-update from [`${{ steps.rev.outputs.old }}`](https://github.com/JeroenGar/sparrow/commit/${{ steps.rev.outputs.old }}) → [`${{ steps.rev.outputs.new }}`](https://github.com/JeroenGar/sparrow/commit/${{ steps.rev.outputs.new }})
+
+            [Upstream changes](https://github.com/JeroenGar/sparrow/compare/${{ steps.rev.outputs.old }}...${{ steps.rev.outputs.new }})
+
+            `cargo check`: **${{ steps.check.outcome }}**
+
+            ${{ steps.check.outcome == 'failure' && 'Upstream API changed, spyrrow needs to be adapted manually:' || '' }}
+            ${{ steps.check.outcome == 'failure' && format('```{0}{1}{0}```', fromJSON('"\n"'), steps.errors.outputs.errors) || '' }}
           commit-message: "chore: sync sparrow rev to ${{ steps.rev.outputs.new }}"

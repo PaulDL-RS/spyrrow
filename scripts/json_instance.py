@@ -10,10 +10,20 @@ class SparrowSimplePolygon(BaseModel):
     data: list[tuple[float, float]]
 
 
+class SparrowRotation(BaseModel):
+    mode: Literal["discrete", "stepped", "continuous"]
+    angles: list[float] | None = None
+    step: float | None = None
+
+
+class SparrowOrientation(BaseModel):
+    rotation: SparrowRotation
+
+
 class SparrowItem(BaseModel):
-    id: str = Field(min_length=1)
+    id: int = Field(ge=0)
     demand: PositiveInt
-    allowed_orientations: list[float] | None = None
+    orientation: SparrowOrientation
     shape: SparrowSimplePolygon
     min_quality: int | None = None
 
@@ -25,11 +35,15 @@ class SparrowItem(BaseModel):
         return v
 
     @classmethod
-    def from_spyrrow_item(cls, item: Item) -> Self:
+    def from_spyrrow_item(cls, idx: int, item: Item) -> Self:
+        if item.allowed_orientations is None:
+            rotation = SparrowRotation(mode="continuous")
+        else:
+            rotation = SparrowRotation(mode="discrete", angles=item.allowed_orientations or [0.0])
         return cls(
-            id=item.id,
+            id=idx,
             demand=item.demand,
-            allowed_orientations=item.allowed_orientations,
+            orientation=SparrowOrientation(rotation=rotation),
             shape=SparrowSimplePolygon(type="simple_polygon", data=item.shape),
         )
 
@@ -44,5 +58,5 @@ class SparrowJsonInstance(BaseModel):
         return cls(
             name=instance.name,
             strip_height=instance.strip_height,
-            items=[SparrowItem.from_spyrrow_item(item) for item in instance.items],
+            items=[SparrowItem.from_spyrrow_item(idx, item) for idx, item in enumerate(instance.items)],
         )

@@ -2,6 +2,9 @@ import spyrrow
 import pytest
 import math
 
+from validity import assert_valid_solution
+
+@pytest.mark.quality
 def test_basic():
     rectangle1 = spyrrow.Item(
         "rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0]
@@ -18,8 +21,10 @@ def test_basic():
     )
     config = spyrrow.StripPackingConfig(early_termination=False,total_computation_time=90,num_workers=3,seed=0)
     sol = instance.solve(config)
+    assert_valid_solution(instance, sol)
     assert sol.width == pytest.approx(4,rel=0.05)
 
+@pytest.mark.quality
 def test_early_termination():
     rectangle1 = spyrrow.Item(
         "rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0]
@@ -36,6 +41,7 @@ def test_early_termination():
     )
     config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=600,num_workers=3,seed=0)
     sol = instance.solve(config)
+    assert_valid_solution(instance, sol)
     assert sol.width == pytest.approx(4,rel=0.05)
 
 def test_zero_demand():
@@ -64,6 +70,7 @@ def test_no_items():
     assert sol.density == 0
     assert not sol.placed_items
 
+@pytest.mark.quality
 def test_one_item():
     triangle1 = spyrrow.Item(
         "triangle",
@@ -77,8 +84,10 @@ def test_one_item():
     )
     config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,num_workers=3,seed=0)
     sol = instance.solve(config)
+    assert_valid_solution(instance, sol)
     assert sol.width == pytest.approx(1,rel=0.05)
 
+@pytest.mark.quality
 def test_one_demand():
     triangle1 = spyrrow.Item(
         "triangle",
@@ -92,10 +101,12 @@ def test_one_demand():
     )
     config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,num_workers=3,seed=0)
     sol = instance.solve(config)
+    assert_valid_solution(instance, sol)
     assert sol.width == pytest.approx(math.cos(math.radians(45)),rel=0.05)
 
 
 
+@pytest.mark.quality
 def test_2_consecutive_calls():
     # Test corresponding to crash on the second consecutive call of solve method
     rectangle1 = spyrrow.Item(
@@ -113,8 +124,10 @@ def test_2_consecutive_calls():
     )
     config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,seed=0)
     sol = instance.solve(config)
+    assert_valid_solution(instance, sol)
     config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,seed=0)
     sol = instance.solve(config)
+    assert_valid_solution(instance, sol)
     assert sol.width == pytest.approx(4,rel=0.05)
 
 def test_concave_polygons():
@@ -125,8 +138,10 @@ def test_concave_polygons():
     )
     config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=30,seed=0)
     sol = instance.solve(config)
+    assert_valid_solution(instance, sol)
     assert sol.width
 
+@pytest.mark.quality
 def test_continuous_rotation():
     rectangle1 = spyrrow.Item(
         "rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=None
@@ -143,9 +158,44 @@ def test_continuous_rotation():
     )
     config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=90,seed=0)
     sol = instance.solve(config)
+    assert_valid_solution(instance, sol)
     print(sol.width)
     assert sol.width >= 3.5
     assert sol.width < 4
+
+def test_empty_orientations_means_no_rotation():
+    triangle1 = spyrrow.Item("triangle", [(0, 0), (1, 0), (1, 1), (0, 0)], demand=6, allowed_orientations=[])
+    instance = spyrrow.StripPackingInstance("test", strip_height=2.001, items=[triangle1])
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,seed=0)
+    sol = instance.solve(config)
+    assert_valid_solution(instance, sol)
+    assert all(pi.rotation == pytest.approx(0) for pi in sol.placed_items)
+
+def test_discrete_orientations_are_respected():
+    triangle1 = spyrrow.Item("triangle", [(0, 0), (1, 0), (1, 1), (0, 0)], demand=6, allowed_orientations=[0, 90, 180, -90])
+    instance = spyrrow.StripPackingInstance("test", strip_height=2.001, items=[triangle1])
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,seed=0)
+    sol = instance.solve(config)
+    assert_valid_solution(instance, sol)
+    for pi in sol.placed_items:
+        # angles are returned modulo 360
+        assert any(math.isclose((pi.rotation - a) % 360, 0, abs_tol=1e-3) or math.isclose((pi.rotation - a) % 360, 360, abs_tol=1e-3) for a in [0, 90, 180, -90])
+
+def test_min_items_separation():
+    rectangle1 = spyrrow.Item("rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0])
+    instance = spyrrow.StripPackingInstance("test", strip_height=2.5, items=[rectangle1])
+    config = spyrrow.StripPackingConfig(early_termination=True,total_computation_time=10,min_items_separation=0.2,seed=0)
+    sol = instance.solve(config)
+    assert_valid_solution(instance, sol)
+    # 2 columns of 2 squares, with a gap of at least 0.2 between and around them
+    assert sol.width >= 2.4 - 1e-3
+
+def test_impossible_separation_raises():
+    rectangle1 = spyrrow.Item("rectangle", [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], demand=4, allowed_orientations=[0])
+    instance = spyrrow.StripPackingInstance("test", strip_height=2.0, items=[rectangle1])
+    config = spyrrow.StripPackingConfig(total_computation_time=10,min_items_separation=5.0,seed=0)
+    with pytest.raises(ValueError):
+        instance.solve(config)
 
 if __name__ == '__main__':
     test_continuous_rotation()

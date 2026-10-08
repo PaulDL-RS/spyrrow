@@ -1,8 +1,10 @@
-use jagua_rs::io::ext_repr::{ExtItem as BaseItem, ExtSPolygon, ExtShape};
+use jagua_rs::io::ext_repr::{
+    ExtItem as BaseItem, ExtOrientation, ExtRotation, ExtSPolygon, ExtShape,
+};
 use jagua_rs::io::import::Importer;
-use jagua_rs::probs::spp::entities::{SPInstance, SPSolution};
+use jagua_rs::probs::spp::entities::SPSolution;
 use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use rand::SeedableRng;
 use rand::rngs::Xoshiro256PlusPlus;
@@ -244,9 +246,9 @@ struct ProgressListener {
 }
 
 impl SolutionListener for ProgressListener {
-    fn report(&mut self, report: ReportType, solution: &SPSolution, instance: &SPInstance) {
+    fn report(&mut self, report: ReportType, solution: &SPSolution) {
         // Export is acceptable because reports are infrequent (only on improving solutions).
-        let exported = jagua_rs::probs::spp::io::export(instance, solution, *EPOCH);
+        let exported = jagua_rs::probs::spp::io::export(solution, *EPOCH);
         let placed_items: Vec<PlacedItemPy> = exported
             .layout
             .placed_items
@@ -276,10 +278,10 @@ enum SolListener {
 }
 
 impl SolutionListener for SolListener {
-    fn report(&mut self, report: ReportType, solution: &SPSolution, instance: &SPInstance) {
+    fn report(&mut self, report: ReportType, solution: &SPSolution) {
         match self {
-            SolListener::Dummy(d) => d.report(report, solution, instance),
-            SolListener::Progress(p) => p.report(report, solution, instance),
+            SolListener::Dummy(d) => d.report(report, solution),
+            SolListener::Progress(p) => p.report(report, solution),
         }
     }
 }
@@ -404,18 +406,32 @@ struct StripPackingInstancePy {
     pub items: Vec<ItemPy>,
 }
 
-impl From<StripPackingInstancePy> for ExtSPInstance {
-    fn from(value: StripPackingInstancePy) -> Self {
-        let items = value
+// Maps spyrrow's `allowed_orientations` convention onto jagua-rs' explicit rotation modes:
+// None -> free rotation, [] -> [0.], otherwise the given discrete angles.
+fn to_ext_orientation(allowed_orientations: Option<Vec<f32>>) -> ExtOrientation {
+    let rotation = match allowed_orientations {
+        None => ExtRotation::Continuous {},
+        Some(angles) if angles.is_empty() => ExtRotation::Discrete { angles: vec![0.0] },
+        Some(angles) => ExtRotation::Discrete { angles },
+    };
+    ExtOrientation {
+        rotation,
+        reflection_axes: Vec::new(),
+    }
+}
+
+impl StripPackingInstancePy {
+    fn to_ext_instance(&self, min_item_separation: Option<f32>) -> ExtSPInstance {
+        let items = self
             .items
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(idx, v)| {
-                let polygon = ExtSPolygon(v.shape);
+                let polygon = ExtSPolygon(v.shape.clone());
                 let shape = ExtShape::SimplePolygon(polygon);
                 let base = BaseItem {
                     id: idx as u64,
-                    allowed_orientations: v.allowed_orientations,
+                    orientation: to_ext_orientation(v.allowed_orientations.clone()),
                     shape,
                     min_quality: None,
                 };
@@ -426,8 +442,9 @@ impl From<StripPackingInstancePy> for ExtSPInstance {
             })
             .collect();
         ExtSPInstance {
-            name: value.name,
-            strip_height: value.strip_height,
+            name: self.name.clone(),
+            min_item_separation: min_item_separation.unwrap_or(0.0),
+            strip_height: self.strip_height,
             items,
         }
     }
@@ -473,14 +490,18 @@ impl StripPackingInstancePy {
     /// Returns:
     ///     a StripPackingSolution
     ///
+    /// Raises:
+    ///     ValueError: If the instance can not be imported by the solver (invalid shape, separation larger than the strip height, ...)
+    ///     RuntimeError: If the solver fails to build an initial solution
+    ///
     #[pyo3(signature = (config, progress=None))]
-    fn solve(&self, config: StripPackingConfigPy, progress: Option<ProgressQueuePy>, py: Python) -> StripPackingSolutionPy {
+    fn solve(&self, config: StripPackingConfigPy, progress: Option<ProgressQueuePy>, py: Python) -> PyResult<StripPackingSolutionPy> {
         if self.items.is_empty() {
-            return StripPackingSolutionPy {
+            return Ok(StripPackingSolutionPy {
                 width: 0.0,
                 density: 0.0,
                 placed_items:Vec::new(),
-            }
+            })
         }
         let mut rs_config = DEFAULT_SPARROW_CONFIG;
         rs_config.rng_seed = Some(config.seed as usize);
@@ -495,16 +516,16 @@ impl StripPackingInstancePy {
                 ShrinkDecayStrategy::FailureBased(DEFAULT_FAIL_DECAY_RATIO_CMPR);
         }
         rs_config.cde_config.quadtree_depth = config.quadtree_depth;
-        rs_config.min_item_separation = config.min_items_separation;
 
-        let ext_instance = self.clone().into();
+        let ext_instance = self.to_ext_instance(config.min_items_separation);
         let importer = Importer::new(
             rs_config.cde_config,
             rs_config.poly_simpl_tolerance,
-            rs_config.min_item_separation,None
+            // kept disabled as in previous spyrrow versions, unlike sparrow's default
+            None,
         );
         let instance = jagua_rs::probs::spp::io::import_instance(&importer, &ext_instance)
-            .expect("Expected a Strip Packing Problem Instance");
+            .map_err(|e| PyValueError::new_err(format!("Invalid StripPackingInstance: {e:#}")))?;
         let mut terminator = terminator::PythonTerminator::default();
 
         let mut listener = match progress {
@@ -517,16 +538,17 @@ impl StripPackingInstancePy {
 
         py.detach(move || {
             let solution = optimize(
-                instance.clone(),
+                instance,
                 rng,
                 &mut listener,
                 &mut terminator,
                 &rs_config.expl_cfg,
                 &rs_config.cmpr_cfg,
                 None,
-            );
+            )
+            .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
 
-            let solution = jagua_rs::probs::spp::io::export(&instance, &solution, *EPOCH);
+            let solution = jagua_rs::probs::spp::io::export(&solution, *EPOCH);
 
             let placed_items: Vec<PlacedItemPy> = solution
                 .layout
@@ -539,11 +561,11 @@ impl StripPackingInstancePy {
                 })
                 .collect();
 
-            StripPackingSolutionPy {
+            Ok(StripPackingSolutionPy {
                 width: solution.strip_width,
                 density: solution.density,
                 placed_items,
-            }
+            })
         })
     }
 }
