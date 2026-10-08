@@ -87,3 +87,18 @@ Second, a easier integration with the package `shapely` is envsionned.
 Please use GitHub issues to request features. 
 They will be considered relative to what is already implemented in the parent library `sparrow`. 
 If necessary, they can be forwarded to it. 
+
+### Tests
+
+The tests come in two tiers:
+
+- hardware independent tests check that every solution is a valid layout (all items placed, allowed rotations, inside the strip, no overlap). They pass whatever the speed of the machine.
+- quality tests, marked `@pytest.mark.quality`, assert how narrow the strip gets. They stop on a budget of evaluations (`max_evaluations`) with a fixed seed and number of workers, so they reach the same width on any machine; slow machines (emulated CI runners) only take longer, which is why they are skipped there.
+
+```bash
+maturin develop --release
+pytest -n auto                    # everything
+pytest -n auto -m "not quality"   # hardware independent tests only, as on the emulated CI runners
+```
+
+New solve tests should call `assert_valid_solution` from `tests/validity.py`, and keep strip width targets in `quality` tests.

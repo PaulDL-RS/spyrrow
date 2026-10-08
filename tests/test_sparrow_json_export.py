@@ -108,7 +108,7 @@ def test_solution_to_json_str(solved):
     assert data["density"] == pytest.approx(solution.density)
     assert len(data["placed_items"]) == len(solution.placed_items)
     first = data["placed_items"][0]
-    assert set(first) == {"id", "translation", "rotation"}
+    assert set(first) == {"id", "translation", "rotation", "reflected"}
     assert first["id"] == solution.placed_items[0].id
 
 
