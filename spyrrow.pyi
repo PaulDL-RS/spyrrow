@@ -10,6 +10,7 @@ class Item:
     shape: list[Point]
     allowed_orientations: list[float]
     reflection_axis: float | None
+    rotation_step: float | None
 
     def __init__(
         self,
@@ -18,6 +19,7 @@ class Item:
         demand: int,
         allowed_orientations: Sequence[float] | None,
         reflection_axis: float | None = None,
+        rotation_step: float | None = None,
     ):
         """
         An Item represents any closed 2D shape by its outer boundary.
@@ -43,9 +45,14 @@ class Item:
               Mirrored placements are reported by `PlacedItem.reflected`.
               Note: the sparrow version bundled (0.3.0) only samples the non-reflected orientations, so the solver currently never returns a reflected placement.
               The axis is still imported and validated by the underlying jagua-rs, and will take effect once the solver explores reflections.
+            rotation_step (float|None): Angle in degrees of a regular rotation step. Defaults to None.
+              The Item is then allowed the angles 0, step, 2*step, ... below 360°.
+              Must be in (0, 360] and evenly divide 360° (e.g. 90., 45., 60., 360.). 360. means no rotation.
+              Can only be used with `allowed_orientations=None`.
 
         Raises:
-            ValueError: If `reflection_axis` is not finite.
+            ValueError: If `reflection_axis` is not finite, if both `allowed_orientations` and `rotation_step` are provided, or if `rotation_step` is not a valid step.
+              The attributes can also be set after construction. In this case, the same checks are done by `StripPackingInstance.solve`.
         """
 
     def to_json_str(self) -> str:
