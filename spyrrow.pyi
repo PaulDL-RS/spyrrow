@@ -253,6 +253,15 @@ class StripPackingConfig:
     num_workers:Optional[int]
     min_items_separation: Optional[float]
     max_evaluations: Optional[int]
+    narrow_concavity_cutoff: Optional[tuple[float, float]]
+    poly_simpl_tolerance: Optional[float]
+    max_conseq_failed_attempts: Optional[int]
+    compression_failure_decay_ratio: Optional[float]
+    iter_no_imprv_limit: Optional[int]
+    strike_limit: Optional[int]
+    n_container_samples: int
+    n_focussed_samples: int
+    cd_threshold: int
 
     def __init__(
         self,
@@ -265,6 +274,15 @@ class StripPackingConfig:
         num_workers:Optional[int]= None,
         seed: Optional[int] = None,
         max_evaluations: Optional[int] = None,
+        narrow_concavity_cutoff: Optional[tuple[float, float]] = None,
+        poly_simpl_tolerance: Optional[float] = 0.001,
+        max_conseq_failed_attempts: Optional[int] = None,
+        compression_failure_decay_ratio: Optional[float] = None,
+        iter_no_imprv_limit: Optional[int] = None,
+        strike_limit: Optional[int] = None,
+        n_container_samples: int = 50,
+        n_focussed_samples: int = 25,
+        cd_threshold: int = 64,
     ) -> None:
         """Initializes a configuration object for the strip packing algorithm.
 
@@ -294,9 +312,44 @@ class StripPackingConfig:
               (up to floating point differences between CPU architectures).
               When set, compression shrinks its steps after failures (as with `early_termination`) instead of over time.
               Must be strictly positive. Defaults to None (no budget).
+            narrow_concavity_cutoff (Optional[tuple[float, float]], optional): Shape preprocessing. Narrow concavities of the items
+              are closed by a straight edge (a conservative change: the item gets slightly larger, never smaller).
+              Given as (max_distance_ratio, max_area_ratio): the maximum distance between the two vertices bounding the concavity,
+              as a fraction of the item's diameter, and the maximum area of the closed sub-shape, as a fraction of the item's area.
+              Both must be finite and non-negative. None disables the closing, which is spyrrow's historical behaviour.
+              The sparrow command line tool uses (0.01, 0.01). Defaults to None.
+            poly_simpl_tolerance (Optional[float], optional): Shape preprocessing. Maximum allowed inflation of an item, as a ratio of its area,
+              when its polygon is simplified. Must be finite and non-negative. None disables the simplification.
+              Defaults to 0.001, sparrow's default.
+            max_conseq_failed_attempts (Optional[int], optional): Exploration stops after this many consecutive failed attempts to
+              reach a narrower strip, and the solver moves on to compression. Must be strictly positive.
+              If None, `early_termination` decides: 10 (sparrow's `DEFAULT_MAX_CONSEQ_FAILS_EXPL`) if it is True, no limit if it is False.
+              An explicit value always takes precedence over `early_termination`. Defaults to None.
+            compression_failure_decay_ratio (Optional[float], optional): If set, the compression phase shrinks the strip by a step
+              that decays geometrically by this ratio each time an attempt fails (sparrow's `FailureBased` strategy).
+              Must be strictly between 0 and 1; smaller values make compression give up sooner.
+              If None, `early_termination` decides: ratio 0.9 (sparrow's `DEFAULT_FAIL_DECAY_RATIO_CMPR`) if it is True,
+              a step decaying linearly with time if it is False.
+              An explicit value always takes precedence over `early_termination`. Defaults to None.
+            iter_no_imprv_limit (Optional[int], optional): Separator: number of consecutive iterations without improvement
+              after which a strike is counted. Must be strictly positive.
+              If None, sparrow's per-phase defaults are used (200 in exploration, 100 in compression).
+              If set, the value is used for both phases. Defaults to None.
+            strike_limit (Optional[int], optional): Separator: number of strikes after which a separation attempt is abandoned.
+              Must be strictly positive.
+              If None, sparrow's per-phase defaults are used (3 in exploration, 5 in compression).
+              If set, the value is used for both phases. Defaults to None.
+            n_container_samples (int, optional): Number of placements sampled uniformly in the strip for each item move.
+              Must be strictly positive. Defaults to 50, sparrow's default.
+            n_focussed_samples (int, optional): Number of placements sampled around the item's current position for each item move.
+              Can be 0. Defaults to 25, sparrow's default.
+            cd_threshold (int, optional): Collision detection engine: the quadtree traversal stops and edges are tested directly
+              when a node holds fewer edges than this threshold. Must fit in 0..=255. Defaults to 64, sparrow's default.
+
+        The advanced options are meant for power users, the defaults reproduce the historical behaviour of spyrrow exactly.
 
         Raises:
-            ValueError: If the combination of time arguments is invalid, or if `max_evaluations` is 0.
+            ValueError: If the combination of time arguments is invalid, if `max_evaluations` is 0, or if an advanced option has an invalid value.
 
         """
 
@@ -390,6 +443,7 @@ class StripPackingInstance:
             a StripPackingSolution
 
         Raises:
+            ValueError: If an advanced option of the config was set to an invalid value after its creation.
             ValueError: If the instance can not be imported by the solver (invalid shape, separation larger than the strip height, ...),
               or if the initial solution is not valid for this instance (unknown item id, item count different from the demand, invalid width, infeasible layout, ...)
             RuntimeError: If the solver fails to build an initial solution

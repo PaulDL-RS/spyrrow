@@ -27,6 +27,20 @@ use std::time::Duration;
 
 mod terminator;
 
+// Defaults of the advanced options, taken from sparrow so that they follow its default configuration.
+const DEFAULT_POLY_SIMPL_TOLERANCE: Option<f32> = DEFAULT_SPARROW_CONFIG.poly_simpl_tolerance;
+const DEFAULT_N_CONTAINER_SAMPLES: usize = DEFAULT_SPARROW_CONFIG
+    .expl_cfg
+    .separator_config
+    .sample_config
+    .n_container_samples;
+const DEFAULT_N_FOCUSSED_SAMPLES: usize = DEFAULT_SPARROW_CONFIG
+    .expl_cfg
+    .separator_config
+    .sample_config
+    .n_focussed_samples;
+const DEFAULT_CD_THRESHOLD: u8 = DEFAULT_SPARROW_CONFIG.cde_config.cd_threshold;
+
 #[pyclass(name = "Item", get_all, set_all)]
 #[derive(Clone, Serialize)]
 /// An Item represents any closed 2D shape by its outer boundary.
@@ -691,9 +705,44 @@ fn all_unique(strings: &[&str]) -> bool {
 ///       (up to floating point differences between CPU architectures).
 ///       When set, compression shrinks its steps after failures (as with `early_termination`) instead of over time.
 ///       Must be strictly positive. Defaults to None (no budget).
+///     narrow_concavity_cutoff (Optional[tuple[float, float]], optional): Shape preprocessing. Narrow concavities of the items
+///       are closed by a straight edge (a conservative change: the item gets slightly larger, never smaller).
+///       Given as (max_distance_ratio, max_area_ratio): the maximum distance between the two vertices bounding the concavity,
+///       as a fraction of the item's diameter, and the maximum area of the closed sub-shape, as a fraction of the item's area.
+///       Both must be finite and non-negative. None disables the closing, which is spyrrow's historical behaviour.
+///       The sparrow command line tool uses (0.01, 0.01). Defaults to None.
+///     poly_simpl_tolerance (Optional[float], optional): Shape preprocessing. Maximum allowed inflation of an item, as a ratio of its area,
+///       when its polygon is simplified. Must be finite and non-negative. None disables the simplification.
+///       Defaults to 0.001, sparrow's default.
+///     max_conseq_failed_attempts (Optional[int], optional): Exploration stops after this many consecutive failed attempts to
+///       reach a narrower strip, and the solver moves on to compression. Must be strictly positive.
+///       If None, `early_termination` decides: 10 (sparrow's `DEFAULT_MAX_CONSEQ_FAILS_EXPL`) if it is True, no limit if it is False.
+///       An explicit value always takes precedence over `early_termination`. Defaults to None.
+///     compression_failure_decay_ratio (Optional[float], optional): If set, the compression phase shrinks the strip by a step
+///       that decays geometrically by this ratio each time an attempt fails (sparrow's `FailureBased` strategy).
+///       Must be strictly between 0 and 1; smaller values make compression give up sooner.
+///       If None, `early_termination` decides: ratio 0.9 (sparrow's `DEFAULT_FAIL_DECAY_RATIO_CMPR`) if it is True,
+///       a step decaying linearly with time if it is False.
+///       An explicit value always takes precedence over `early_termination`. Defaults to None.
+///     iter_no_imprv_limit (Optional[int], optional): Separator: number of consecutive iterations without improvement
+///       after which a strike is counted. Must be strictly positive.
+///       If None, sparrow's per-phase defaults are used (200 in exploration, 100 in compression).
+///       If set, the value is used for both phases. Defaults to None.
+///     strike_limit (Optional[int], optional): Separator: number of strikes after which a separation attempt is abandoned.
+///       Must be strictly positive.
+///       If None, sparrow's per-phase defaults are used (3 in exploration, 5 in compression).
+///       If set, the value is used for both phases. Defaults to None.
+///     n_container_samples (int, optional): Number of placements sampled uniformly in the strip for each item move.
+///       Must be strictly positive. Defaults to 50, sparrow's default.
+///     n_focussed_samples (int, optional): Number of placements sampled around the item's current position for each item move.
+///       Can be 0. Defaults to 25, sparrow's default.
+///     cd_threshold (int, optional): Collision detection engine: the quadtree traversal stops and edges are tested directly
+///       when a node holds fewer edges than this threshold. Must fit in 0..=255. Defaults to 64, sparrow's default.
 ///
 /// Raises:
-///     ValueError: If the combination of time arguments is invalid, or if `max_evaluations` is 0.
+///     ValueError: If the combination of time arguments is invalid, if `max_evaluations` is 0, or if an advanced option has an invalid value.
+///
+/// The advanced options are meant for power users, the defaults reproduce the historical behaviour of spyrrow exactly.
 ///
 struct StripPackingConfigPy {
     early_termination: bool,
@@ -705,12 +754,71 @@ struct StripPackingConfigPy {
     num_workers: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_evaluations: Option<NonZeroU64>,
+    narrow_concavity_cutoff: Option<(f32, f32)>,
+    poly_simpl_tolerance: Option<f32>,
+    max_conseq_failed_attempts: Option<usize>,
+    compression_failure_decay_ratio: Option<f32>,
+    iter_no_imprv_limit: Option<usize>,
+    strike_limit: Option<usize>,
+    n_container_samples: usize,
+    n_focussed_samples: usize,
+    cd_threshold: u8,
+}
+
+impl StripPackingConfigPy {
+    // Checks the advanced options. Called by the constructor and again by `solve`, since the attributes are settable.
+    fn validate_advanced(&self) -> PyResult<()> {
+        let non_negative = |v: f32| v.is_finite() && v >= 0.0;
+        if let Some((distance_ratio, area_ratio)) = self.narrow_concavity_cutoff
+            && !(non_negative(distance_ratio) && non_negative(area_ratio))
+        {
+            return Err(PyValueError::new_err(
+                "narrow_concavity_cutoff must be None or a pair of finite non-negative floats",
+            ));
+        }
+        if let Some(tolerance) = self.poly_simpl_tolerance
+            && !non_negative(tolerance)
+        {
+            return Err(PyValueError::new_err(
+                "poly_simpl_tolerance must be None or a finite non-negative float",
+            ));
+        }
+        if self.max_conseq_failed_attempts == Some(0) {
+            return Err(PyValueError::new_err(
+                "max_conseq_failed_attempts must be None or strictly positive",
+            ));
+        }
+        if let Some(ratio) = self.compression_failure_decay_ratio
+            && !(ratio.is_finite() && ratio > 0.0 && ratio < 1.0)
+        {
+            return Err(PyValueError::new_err(
+                "compression_failure_decay_ratio must be None or strictly between 0 and 1",
+            ));
+        }
+        if self.iter_no_imprv_limit == Some(0) {
+            return Err(PyValueError::new_err(
+                "iter_no_imprv_limit must be None or strictly positive",
+            ));
+        }
+        if self.strike_limit == Some(0) {
+            return Err(PyValueError::new_err(
+                "strike_limit must be None or strictly positive",
+            ));
+        }
+        if self.n_container_samples == 0 {
+            return Err(PyValueError::new_err(
+                "n_container_samples must be strictly positive",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[pymethods]
 impl StripPackingConfigPy {
     #[new]
-    #[pyo3(signature = (early_termination=true,quadtree_depth=4,min_items_separation=None,total_computation_time=600,exploration_time=None,compression_time=None,num_workers=None,seed=None,max_evaluations=None))]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (early_termination=true,quadtree_depth=4,min_items_separation=None,total_computation_time=600,exploration_time=None,compression_time=None,num_workers=None,seed=None,max_evaluations=None,narrow_concavity_cutoff=None,poly_simpl_tolerance=DEFAULT_POLY_SIMPL_TOLERANCE,max_conseq_failed_attempts=None,compression_failure_decay_ratio=None,iter_no_imprv_limit=None,strike_limit=None,n_container_samples=DEFAULT_N_CONTAINER_SAMPLES,n_focussed_samples=DEFAULT_N_FOCUSSED_SAMPLES,cd_threshold=DEFAULT_CD_THRESHOLD))]
     fn new(
         early_termination: bool,
         quadtree_depth: u8,
@@ -721,6 +829,15 @@ impl StripPackingConfigPy {
         num_workers: Option<usize>,
         seed: Option<u64>,
         max_evaluations: Option<NonZeroU64>,
+        narrow_concavity_cutoff: Option<(f32, f32)>,
+        poly_simpl_tolerance: Option<f32>,
+        max_conseq_failed_attempts: Option<usize>,
+        compression_failure_decay_ratio: Option<f32>,
+        iter_no_imprv_limit: Option<usize>,
+        strike_limit: Option<usize>,
+        n_container_samples: usize,
+        n_focussed_samples: usize,
+        cd_threshold: u8,
     ) -> PyResult<Self> {
         let (exploration_time, compression_time) = match (
             total_computation_time,
@@ -743,7 +860,7 @@ impl StripPackingConfigPy {
         };
         let seed = seed.unwrap_or_else(rand::random);
         let num_workers = num_workers.unwrap_or_else(num_cpus::get);
-        Ok(Self {
+        let config = Self {
             early_termination,
             seed,
             exploration_time,
@@ -752,7 +869,18 @@ impl StripPackingConfigPy {
             num_workers,
             min_items_separation,
             max_evaluations,
-        })
+            narrow_concavity_cutoff,
+            poly_simpl_tolerance,
+            max_conseq_failed_attempts,
+            compression_failure_decay_ratio,
+            iter_no_imprv_limit,
+            strike_limit,
+            n_container_samples,
+            n_focussed_samples,
+            cd_threshold,
+        };
+        config.validate_advanced()?;
+        Ok(config)
     }
 
     fn __deepcopy__(&self, _memo: Py<PyAny>) -> Self {
@@ -1014,6 +1142,7 @@ impl StripPackingInstancePy {
     ///     a StripPackingSolution
     ///
     /// Raises:
+    ///     ValueError: If an advanced option of the config was set to an invalid value after its creation.
     ///     ValueError: If the instance can not be imported by the solver (invalid shape, separation larger than the strip height, ...),
     ///       or if the initial solution is not valid for this instance (unknown item id, item count different from the demand, invalid width, infeasible layout, ...)
     ///     RuntimeError: If the solver fails to build an initial solution
@@ -1031,6 +1160,7 @@ impl StripPackingInstancePy {
                 placed_items:Vec::new(),
             })
         }
+        config.validate_advanced()?;
         let mut rs_config = DEFAULT_SPARROW_CONFIG;
         rs_config.rng_seed = Some(config.seed as usize);
         rs_config.expl_cfg.time_limit = config.exploration_time;
@@ -1048,14 +1178,37 @@ impl StripPackingInstancePy {
             rs_config.cmpr_cfg.shrink_decay =
                 ShrinkDecayStrategy::FailureBased(DEFAULT_FAIL_DECAY_RATIO_CMPR);
         }
+        // Explicit values take precedence over what `early_termination` implies
+        if let Some(n) = config.max_conseq_failed_attempts {
+            rs_config.expl_cfg.max_conseq_failed_attempts = Some(n);
+        }
+        if let Some(ratio) = config.compression_failure_decay_ratio {
+            rs_config.cmpr_cfg.shrink_decay = ShrinkDecayStrategy::FailureBased(ratio);
+        }
+        for separator_config in [
+            &mut rs_config.expl_cfg.separator_config,
+            &mut rs_config.cmpr_cfg.separator_config,
+        ] {
+            if let Some(limit) = config.iter_no_imprv_limit {
+                separator_config.iter_no_imprv_limit = limit;
+            }
+            if let Some(limit) = config.strike_limit {
+                separator_config.strike_limit = limit;
+            }
+            separator_config.sample_config.n_container_samples = config.n_container_samples;
+            separator_config.sample_config.n_focussed_samples = config.n_focussed_samples;
+        }
         rs_config.cde_config.quadtree_depth = config.quadtree_depth;
+        rs_config.cde_config.cd_threshold = config.cd_threshold;
+        rs_config.poly_simpl_tolerance = config.poly_simpl_tolerance;
+        rs_config.narrow_concavity_cutoff_ratio = config.narrow_concavity_cutoff;
 
         let ext_instance = self.to_ext_instance(py, config.min_items_separation)?;
         let importer = Importer::new(
             rs_config.cde_config,
             rs_config.poly_simpl_tolerance,
-            // kept disabled as in previous spyrrow versions, unlike sparrow's default
-            None,
+            // disabled by default as in previous spyrrow versions, unlike sparrow's default
+            rs_config.narrow_concavity_cutoff_ratio,
         );
         let instance = jagua_rs::probs::spp::io::import_instance(&importer, &ext_instance)
             .map_err(|e| PyValueError::new_err(format!("Invalid StripPackingInstance: {e:#}")))?;
