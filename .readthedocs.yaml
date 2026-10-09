@@ -5,16 +5,17 @@ version: 2
 sphinx:
   builder: html
   configuration: docs/conf.py
+  fail_on_warning: true
 
 build:
   os: "ubuntu-24.04"
   tools:
     python: "3.12"
+    # sparrow requires a recent Rust; "latest" follows upstream bumps of `rust-version`
+    rust: "latest"
   jobs:
     install:
       - pip install sphinx
-      - pip install spyrrow
-# python:
-#   install:
-#     - method: pip
-#       path: .
+      # Document the sources of this version, not the latest release on PyPI.
+      # A debug build is enough for autodoc, which only imports the module, and builds much faster.
+      - MATURIN_PEP517_ARGS="--profile dev" pip install .

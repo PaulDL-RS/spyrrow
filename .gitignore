@@ -76,3 +76,6 @@ docs/_build/
 cli-test
 tmp
 
+
+# Sphinx output
+docs/_build/

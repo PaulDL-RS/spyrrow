@@ -14,7 +14,7 @@ jagua-rs = { features = ["spp"], version = "=1.0.0" }
 # jagua-rs = { git = "https://github.com/JeroenGar/jagua-rs.git", rev = "ba38bcae9ed3ab41a9e93a1894e2b01ea87c6619", features = [
 #    "spp",
 #] }
-pyo3 = "0.27.2"
+pyo3 = "0.29.3"
 rand = "0.10"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
@@ -22,3 +22,7 @@ sparrow = { git = "https://github.com/JeroenGar/sparrow.git", rev = "3be915856b5
     "only_final_svg",
 ] }
 num_cpus = "1.17.0"
+
+[features]
+# PyO3 introspection data, only needed to generate the type stubs (scripts/generate_stubs.py)
+stubs = ["pyo3/experimental-inspect"]

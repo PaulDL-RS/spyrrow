@@ -41,7 +41,7 @@ const DEFAULT_N_FOCUSSED_SAMPLES: usize = DEFAULT_SPARROW_CONFIG
     .n_focussed_samples;
 const DEFAULT_CD_THRESHOLD: u8 = DEFAULT_SPARROW_CONFIG.cde_config.cd_threshold;
 
-#[pyclass(name = "Item", get_all, set_all)]
+#[pyclass(name = "Item", get_all, set_all, from_py_object)]
 #[derive(Clone, Serialize)]
 /// An Item represents any closed 2D shape by its outer boundary.
 ///
@@ -50,14 +50,14 @@ const DEFAULT_CD_THRESHOLD: u8 = DEFAULT_SPARROW_CONFIG.cde_config.cd_threshold;
 ///
 /// Args:
 ///     id (str): The Item identifier
-///       Needs to be unique accross all Items of a StripPackingInstance
+///       Needs to be unique across all Items of a StripPackingInstance
 ///     shape (Sequence[tuple[float,float]]): An ordered Sequence of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this list of points.
-///       The origin point can be included twice as the finishing point. If not, [last point, first point] is infered to be the last straight line of the shape.
+///       The origin point can be included twice as the finishing point. If not, [last point, first point] is inferred to be the last straight line of the shape.
 ///     demand (int): The quantity of identical Items to be placed inside the strip. Should be strictly positive.
 ///     allowed_orientations (Sequence[float]|None): Sequence of angles in degrees allowed.
 ///       An empty Sequence is equivalent to [0.].
 ///       A None value means that the item is free to rotate
-///       The algorithmn is only very weakly sensible to the length of the Sequence given.
+///       The algorithm is only very weakly sensible to the length of the Sequence given.
 ///     reflection_axis (float|None): Angle in degrees, from the x axis, of an axis across which the Item may be mirrored. Defaults to None.
 ///       None means that the Item is never reflected.
 ///       When set, the solver is free to place the Item either as is or mirrored across this axis (it is not forced to mirror).
@@ -151,7 +151,7 @@ impl ItemPy {
     }
 }
 
-#[pyclass(name = "PlacedItem", get_all)]
+#[pyclass(name = "PlacedItem", get_all, skip_from_py_object)]
 #[derive(Clone, Debug, Serialize)]
 /// An object representing where a copy of an Item was placed inside the strip.
 ///
@@ -186,11 +186,11 @@ impl PlacedItemPy {
     }
 }
 
-#[pyclass(name = "StripPackingSolution", get_all)]
+#[pyclass(name = "StripPackingSolution", get_all, from_py_object)]
 #[derive(Clone, Debug, Serialize)]
 /// An object representing the solution to a given StripPackingInstance.
 ///
-/// Can not be directly instanciated. Result from StripPackingInstance.solve.
+/// Can not be directly instantiated. Result from StripPackingInstance.solve.
 ///
 /// Attributes:
 ///     width (float): the width of the strip found to contains all Items. In the same unit as input.
@@ -220,7 +220,7 @@ impl StripPackingSolutionPy {
     }
 }
 
-#[pyclass(name = "ReportType", eq, eq_int)]
+#[pyclass(name = "ReportType", eq, eq_int, skip_from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// The type of progress report emitted by the solver.
 ///
@@ -254,9 +254,6 @@ impl ReportTypePy {
         }
     }
 
-    fn __repr__(&self) -> String {
-        format!("ReportType.{:?}", self)
-    }
 }
 
 impl From<ReportType> for ReportTypePy {
@@ -276,7 +273,7 @@ struct ProgressReport {
     solution: StripPackingSolutionPy,
 }
 
-#[pyclass(name = "OptimizationPhase", eq, eq_int)]
+#[pyclass(name = "OptimizationPhase", eq, eq_int, skip_from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// A phase of the optimization, as announced by a `PhaseEvent`.
 ///
@@ -289,13 +286,6 @@ enum OptimizationPhasePy {
     Compression = 1,
 }
 
-#[pymethods]
-impl OptimizationPhasePy {
-    fn __repr__(&self) -> String {
-        format!("OptimizationPhase.{:?}", self)
-    }
-}
-
 impl From<OptimizationPhase> for OptimizationPhasePy {
     fn from(phase: OptimizationPhase) -> Self {
         match phase {
@@ -305,7 +295,7 @@ impl From<OptimizationPhase> for OptimizationPhasePy {
     }
 }
 
-#[pyclass(name = "PhaseEvent", get_all, frozen)]
+#[pyclass(name = "PhaseEvent", get_all, frozen, skip_from_py_object)]
 #[derive(Clone, Debug)]
 /// The solver entered a new optimization phase.
 ///
@@ -319,11 +309,11 @@ struct PhaseEventPy {
 #[pymethods]
 impl PhaseEventPy {
     fn __repr__(&self) -> String {
-        format!("PhaseEvent(phase={})", self.phase.__repr__())
+        format!("PhaseEvent(phase=OptimizationPhase.{:?})", self.phase)
     }
 }
 
-#[pyclass(name = "SeparationProgressEvent", get_all, frozen)]
+#[pyclass(name = "SeparationProgressEvent", get_all, frozen, skip_from_py_object)]
 #[derive(Clone, Debug)]
 /// Progress of one separation attempt (the solver tries to remove all overlaps at a given strip width).
 ///
@@ -353,7 +343,7 @@ impl SeparationProgressEventPy {
     }
 }
 
-#[pyclass(name = "SeparationResultEvent", get_all, frozen)]
+#[pyclass(name = "SeparationResultEvent", get_all, frozen, skip_from_py_object)]
 #[derive(Clone, Debug)]
 /// Outcome of a finished separation attempt.
 ///
@@ -386,7 +376,7 @@ impl SeparationResultEventPy {
     }
 }
 
-#[pyclass(name = "CompressionProgressEvent", get_all, frozen)]
+#[pyclass(name = "CompressionProgressEvent", get_all, frozen, skip_from_py_object)]
 #[derive(Clone, Debug)]
 /// The compression phase starts a new attempt to shrink the strip.
 ///
@@ -442,7 +432,7 @@ impl EventBuffer {
 
 const DEFAULT_MAX_EVENTS: usize = 10_000;
 
-#[pyclass(name = "ProgressQueue")]
+#[pyclass(name = "ProgressQueue", from_py_object)]
 #[derive(Clone)]
 /// A thread-safe queue that collects progress reports from the solver.
 ///
@@ -519,6 +509,7 @@ impl ProgressQueuePy {
     /// Returns:
     ///     list[PhaseEvent | SeparationProgressEvent | SeparationResultEvent | CompressionProgressEvent]
     ///
+    #[pyo3(signature = () -> "list[PhaseEvent | SeparationProgressEvent | SeparationResultEvent | CompressionProgressEvent]")]
     fn drain_events(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
         let events: Vec<ProgressEvent> = {
             let mut buffer = self.events.lock().unwrap();
@@ -675,12 +666,12 @@ fn all_unique(strings: &[&str]) -> bool {
     strings.iter().all(|s| seen.insert(*s))
 }
 
-#[pyclass(name = "StripPackingConfig", get_all, set_all)]
+#[pyclass(name = "StripPackingConfig", get_all, set_all, from_py_object)]
 #[derive(Clone, Serialize)]
 /// Initializes a configuration object for the strip packing algorithm.
 ///
-/// Either `total_computation_time`, or both `exploration_time` and
-///   `compression_time`, must be provided. Providing all three or only one of the latter two raises an error.
+/// Either `total_computation_time`, or both `exploration_time` and `compression_time`, must be provided.
+/// Providing all three or only one of the latter two raises an error.
 /// If `total_computation_time` is provided, 80% of it is allocated to exploration and 20% to compression.
 /// If `seed` is not provided, a random seed will be generated.
 ///
@@ -695,8 +686,8 @@ fn all_unique(strings: &[&str]) -> bool {
 ///     exploration_time (Optional[int], optional): Time in seconds allocated to exploration. Defaults to None.
 ///     compression_time (Optional[int], optional): Time in seconds allocated to compression. Defaults to None.
 ///     num_workers (Optional[int], optional): Number of threads used by the collision detection engine during exploration.
-///       When set to None, detect the number of logical CPU cores on the execution plateform. Defaults to None.
-///     seed (Optional[int], optional): Optional random seed to give reproductibility. If None, a random seed is generated. Defaults to None.
+///       When set to None, detect the number of logical CPU cores on the execution platform. Defaults to None.
+///     seed (Optional[int], optional): Optional random seed to give reproducibility. If None, a random seed is generated. Defaults to None.
 ///     max_evaluations (Optional[int], optional): Budget of evaluations (candidate placements evaluated by sparrow), split between
 ///       exploration and compression in the same proportion as their times. Each phase stops at its budget or its time limit,
 ///       whichever comes first. The budget is checked after each separation, so a phase can slightly exceed it.
@@ -897,7 +888,7 @@ impl StripPackingConfigPy {
     }
 }
 
-#[pyclass(name = "StripPackingInstance", get_all, set_all)]
+#[pyclass(name = "StripPackingInstance", get_all, set_all, skip_from_py_object)]
 #[derive(Clone, Serialize)]
 /// An Instance of a Strip Packing Problem.
 ///
@@ -1298,19 +1289,15 @@ impl StripPackingInstancePy {
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn spyrrow(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<ItemPy>()?;
-    m.add_class::<PlacedItemPy>()?;
-    m.add_class::<StripPackingInstancePy>()?;
-    m.add_class::<StripPackingConfigPy>()?;
-    m.add_class::<StripPackingSolutionPy>()?;
-    m.add_class::<ReportTypePy>()?;
-    m.add_class::<OptimizationPhasePy>()?;
-    m.add_class::<PhaseEventPy>()?;
-    m.add_class::<SeparationProgressEventPy>()?;
-    m.add_class::<SeparationResultEventPy>()?;
-    m.add_class::<CompressionProgressEventPy>()?;
-    m.add_class::<ProgressQueuePy>()?;
-    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    Ok(())
+mod spyrrow {
+    #[pymodule_export]
+    use super::{
+        CompressionProgressEventPy, ItemPy, OptimizationPhasePy, PhaseEventPy, PlacedItemPy,
+        ProgressQueuePy, ReportTypePy, SeparationProgressEventPy, SeparationResultEventPy,
+        StripPackingConfigPy, StripPackingInstancePy, StripPackingSolutionPy,
+    };
+
+    #[pymodule_export]
+    #[allow(non_upper_case_globals)]
+    const __version__: &str = env!("CARGO_PKG_VERSION");
 }

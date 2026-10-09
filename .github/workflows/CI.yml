@@ -307,6 +307,68 @@ jobs:
           pip install pytest-xdist[psutil]
           pytest -n auto
 
+  # spyrrow.pyi is generated from the Rust sources (scripts/generate_stubs.py), and the documentation is built
+  # from them as on Read the Docs. Both are uploaded as artifacts. On pull requests from this repository, an out of
+  # date spyrrow.pyi is regenerated and committed to the pull request; elsewhere (forks, main) the job fails.
+  stubs-and-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      # push the regenerated spyrrow.pyi (pull requests from forks always get a read-only token)
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # on pull requests, the pull request branch itself rather than the merge commit, to be able to push to it
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          # CI on a commit pushed with GITHUB_TOKEN waits for a maintainer approval: with SYNC_PR_TOKEN it runs directly
+          token: ${{ secrets.SYNC_PR_TOKEN || github.token }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate the type stubs
+        run: |
+          pip install "maturin>=1.15"
+          python scripts/generate_stubs.py
+      - name: Upload the type stubs
+        uses: actions/upload-artifact@v4
+        with:
+          name: type-stubs
+          path: spyrrow.pyi
+      - name: Compare with the committed type stubs
+        id: stubs
+        run: |
+          if git diff --quiet -- spyrrow.pyi; then
+            echo "spyrrow.pyi is up to date"
+          else
+            git diff -- spyrrow.pyi
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build the documentation (warnings are errors)
+        run: |
+          pip install sphinx
+          MATURIN_PEP517_ARGS="--profile dev" pip install .
+          python -m sphinx -W -b html docs docs/_build/html
+      - name: Upload the documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-html
+          path: docs/_build/html
+      - name: Commit the regenerated type stubs to the pull request
+        if: steps.stubs.outputs.stale == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: regenerate spyrrow.pyi" -- spyrrow.pyi
+          git push
+          echo "::notice::The regenerated spyrrow.pyi was committed to the pull request"
+      - name: Fail on out of date type stubs
+        if: steps.stubs.outputs.stale == 'true'
+        run: |
+          echo "::error::spyrrow.pyi was out of date in this commit. On a pull request from this repository it was regenerated and committed (without SYNC_PR_TOKEN, CI on that commit waits for a maintainer to approve the run); otherwise commit the 'type-stubs' artifact, or run: python scripts/generate_stubs.py"
+          exit 1
+
   sdist:
     runs-on: ubuntu-latest
     steps:
