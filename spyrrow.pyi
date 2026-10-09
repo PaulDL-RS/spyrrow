@@ -30,14 +30,14 @@ class Item:
     
     Args:
         id (str): The Item identifier
-          Needs to be unique accross all Items of a StripPackingInstance
+          Needs to be unique across all Items of a StripPackingInstance
         shape (Sequence[tuple[float,float]]): An ordered Sequence of (x,y) defining the shape boundary. The shape is represented as a polygon formed by this list of points.
-          The origin point can be included twice as the finishing point. If not, [last point, first point] is infered to be the last straight line of the shape.
+          The origin point can be included twice as the finishing point. If not, [last point, first point] is inferred to be the last straight line of the shape.
         demand (int): The quantity of identical Items to be placed inside the strip. Should be strictly positive.
         allowed_orientations (Sequence[float]|None): Sequence of angles in degrees allowed.
           An empty Sequence is equivalent to [0.].
           A None value means that the item is free to rotate
-          The algorithmn is only very weakly sensible to the length of the Sequence given.
+          The algorithm is only very weakly sensible to the length of the Sequence given.
         reflection_axis (float|None): Angle in degrees, from the x axis, of an axis across which the Item may be mirrored. Defaults to None.
           None means that the Item is never reflected.
           When set, the solver is free to place the Item either as is or mirrored across this axis (it is not forced to mirror).
@@ -317,8 +317,8 @@ class StripPackingConfig:
         exploration_time (Optional[int], optional): Time in seconds allocated to exploration. Defaults to None.
         compression_time (Optional[int], optional): Time in seconds allocated to compression. Defaults to None.
         num_workers (Optional[int], optional): Number of threads used by the collision detection engine during exploration.
-          When set to None, detect the number of logical CPU cores on the execution plateform. Defaults to None.
-        seed (Optional[int], optional): Optional random seed to give reproductibility. If None, a random seed is generated. Defaults to None.
+          When set to None, detect the number of logical CPU cores on the execution platform. Defaults to None.
+        seed (Optional[int], optional): Optional random seed to give reproducibility. If None, a random seed is generated. Defaults to None.
         max_evaluations (Optional[int], optional): Budget of evaluations (candidate placements evaluated by sparrow), split between
           exploration and compression in the same proportion as their times. Each phase stops at its budget or its time limit,
           whichever comes first. The budget is checked after each separation, so a phase can slightly exceed it.
@@ -546,7 +546,7 @@ class StripPackingSolution:
     """
     An object representing the solution to a given StripPackingInstance.
     
-    Can not be directly instanciated. Result from StripPackingInstance.solve.
+    Can not be directly instantiated. Result from StripPackingInstance.solve.
     
     Attributes:
         width (float): the width of the strip found to contains all Items. In the same unit as input.
