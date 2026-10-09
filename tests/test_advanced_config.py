@@ -7,7 +7,8 @@ from validity import assert_valid_solution
 
 # Runs compared for equality stop on a budget of evaluations, not on the clock,
 # so that they do the same work on any machine, however slow or loaded (emulated CI runners included).
-BUDGET = dict(total_computation_time=3600, max_evaluations=200_000)
+# Kept small: emulated CI runners do this work 10-100 times slower.
+BUDGET = dict(total_computation_time=3600, max_evaluations=50_000)
 
 OLD_KEYS = {
     "early_termination",
@@ -128,15 +129,19 @@ def test_explicit_max_conseq_failed_attempts_stops_exploration(early_termination
     # An explicit limit of 1 must end exploration much sooner than its share of the budget,
     # whatever early_termination says (it never raises the limit, and with False it adds one).
     # Measured in evaluations rather than seconds, to be independent of the machine.
+    # Separations give up quickly (strike_limit, iter_no_imprv_limit), so that attempts fail early
+    # and a small budget is enough: exploration with the limit stops after ~57k evaluations, ~246k without.
     instance = make_instance()
 
     def explore(**kwargs):
         config = spyrrow.StripPackingConfig(
             total_computation_time=3600,
-            max_evaluations=2_000_000,
+            max_evaluations=300_000,
             num_workers=1,
             seed=3,
             early_termination=early_termination,
+            strike_limit=1,
+            iter_no_imprv_limit=10,
             **kwargs,
         )
         queue = spyrrow.ProgressQueue(detailed=True, max_events=10_000_000)
