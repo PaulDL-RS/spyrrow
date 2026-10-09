@@ -321,7 +321,7 @@ jobs:
           # on pull requests, the pull request branch itself rather than the merge commit, to be able to push to it
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          # GITHUB_TOKEN pushes do not trigger workflows: with SYNC_PR_TOKEN, CI also runs on the stubs commit
+          # CI on a commit pushed with GITHUB_TOKEN waits for a maintainer approval: with SYNC_PR_TOKEN it runs directly
           token: ${{ secrets.SYNC_PR_TOKEN || github.token }}
       - uses: actions/setup-python@v5
         with:
@@ -366,7 +366,7 @@ jobs:
       - name: Fail on out of date type stubs
         if: steps.stubs.outputs.stale == 'true'
         run: |
-          echo "::error::spyrrow.pyi was out of date in this commit. On a pull request from this repository it was regenerated and committed (without SYNC_PR_TOKEN, push again to run CI on it); otherwise commit the 'type-stubs' artifact, or run: python scripts/generate_stubs.py"
+          echo "::error::spyrrow.pyi was out of date in this commit. On a pull request from this repository it was regenerated and committed (without SYNC_PR_TOKEN, CI on that commit waits for a maintainer to approve the run); otherwise commit the 'type-stubs' artifact, or run: python scripts/generate_stubs.py"
           exit 1
 
   sdist:

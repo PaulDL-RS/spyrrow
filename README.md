@@ -109,8 +109,11 @@ New solve tests should call `assert_valid_solution` from `tests/validity.py`, an
 
 ```bash
 uv run python scripts/generate_stubs.py           # regenerate after changing the Python API
-uv run python scripts/generate_stubs.py --check   # what CI runs
+uv run python scripts/generate_stubs.py --check   # fails if spyrrow.pyi is out of date
 ```
+
+CI regenerates the stubs on every run and uploads them as the `type-stubs` artifact, along with the built documentation (`docs-html`).
+On a pull request from this repository, an out of date `spyrrow.pyi` is committed to the pull request by CI; on forks and `main`, the job fails instead.
 
 The documentation on [Read the Docs](https://spyrrow.readthedocs.io/) is built from the sources of each version (not from the latest PyPI release), with the same docstrings. To build it locally:
 
