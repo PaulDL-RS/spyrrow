@@ -469,9 +469,9 @@ checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
 
 [[package]]
 name = "jagua-rs"
-version = "1.0.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e945fd6650dfd7eddfdbc02295df9aef91b1f72ead17f02cb3a4859e3e4afe00"
+checksum = "2968688d182525c3b5b80d49e497f620b626c0e242816fcf3a4f2a91ac64ab06"
 dependencies = [
  "anyhow",
  "document-features",
@@ -964,7 +964,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "sparrow"
 version = "0.3.0"
-source = "git+https://github.com/JeroenGar/sparrow.git?rev=3be915856b543d18c9cb7d4664fe7c53901fe1fd#3be915856b543d18c9cb7d4664fe7c53901fe1fd"
+source = "git+https://github.com/JeroenGar/sparrow.git?rev=4629b22795ae6b25b3b460ccde6fb36a71292b6d#4629b22795ae6b25b3b460ccde6fb36a71292b6d"
 dependencies = [
  "anyhow",
  "clap",
