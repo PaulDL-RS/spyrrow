@@ -6,13 +6,16 @@ A Python module implemented in Rust.
 from collections.abc import Sequence
 from datetime import timedelta
 from typing import Any, Final, final
+
+__all__ = ["__version__", "CompressionProgressEvent", "Item", "OptimizationPhase", "PhaseEvent", "PlacedItem", "ProgressQueue", "ReportType", "SeparationProgressEvent", "SeparationResultEvent", "StripPackingConfig", "StripPackingInstance", "StripPackingSolution"]
+
 __version__: Final[str]
 
 @final
 class CompressionProgressEvent:
     """
     The compression phase starts a new attempt to shrink the strip.
-    
+
     Attributes:
         shrink_step (float): the relative shrink of the strip width attempted (0.001 means 0.1%).
     """
@@ -24,10 +27,10 @@ class CompressionProgressEvent:
 class Item:
     """
     An Item represents any closed 2D shape by its outer boundary.
-    
+
     Spyrrow doesn't support hole(s) inside the shape as of yet. Therefore no Item can be nested inside another.
-    
-    
+
+
     Args:
         id (str): The Item identifier
           Needs to be unique across all Items of a StripPackingInstance
@@ -51,18 +54,18 @@ class Item:
           The Item is then allowed the angles 0, step, 2*step, ... below 360°.
           Must be in (0, 360] and evenly divide 360° (e.g. 90., 45., 60., 360.). 360. means no rotation.
           Can only be used with `allowed_orientations=None`.
-    
+
     Raises:
         ValueError: If `reflection_axis` is not finite, if both `allowed_orientations` and `rotation_step` are provided, or if `rotation_step` is not a valid step.
           The attributes can also be set after construction. In this case, the same checks are done by `StripPackingInstance.solve`.
     """
     def __deepcopy__(self, /, _memo: Any) -> Item: ...
-    def __new__(cls, /, id: str, shape: Sequence[tuple[float, float]], demand: int, allowed_orientations: Sequence[float] |None, reflection_axis: float |None = None, rotation_step: float |None = None) -> Item: ...
+    def __new__(cls, /, id: str, shape: Sequence[tuple[float, float]], demand: int, allowed_orientations: Sequence[float] | None, reflection_axis: float | None = None, rotation_step: float | None = None) -> Item: ...
     def __repr__(self, /) -> str: ...
     @property
-    def allowed_orientations(self, /) -> list[float] |None: ...
+    def allowed_orientations(self, /) -> list[float] | None: ...
     @allowed_orientations.setter
-    def allowed_orientations(self, /, value: Sequence[float] |None) -> None: ...
+    def allowed_orientations(self, /, value: Sequence[float] | None) -> None: ...
     @property
     def demand(self, /) -> int: ...
     @demand.setter
@@ -72,13 +75,13 @@ class Item:
     @id.setter
     def id(self, /, value: str) -> None: ...
     @property
-    def reflection_axis(self, /) -> float |None: ...
+    def reflection_axis(self, /) -> float | None: ...
     @reflection_axis.setter
-    def reflection_axis(self, /, value: float |None) -> None: ...
+    def reflection_axis(self, /, value: float | None) -> None: ...
     @property
-    def rotation_step(self, /) -> float |None: ...
+    def rotation_step(self, /) -> float | None: ...
     @rotation_step.setter
-    def rotation_step(self, /, value: float |None) -> None: ...
+    def rotation_step(self, /, value: float | None) -> None: ...
     @property
     def shape(self, /) -> list[tuple[float, float]]: ...
     @shape.setter
@@ -86,7 +89,7 @@ class Item:
     def to_json_str(self, /) -> str:
         """
         Return a string of the JSON representation of the object
-        
+
         Returns:
             str
         """
@@ -95,7 +98,7 @@ class Item:
 class OptimizationPhase:
     """
     A phase of the optimization, as announced by a `PhaseEvent`.
-    
+
     Variants:
         Exploration: The solver is searching for a feasible strip width.
         Compression: The solver is squeezing the best feasible solution.
@@ -111,7 +114,7 @@ class OptimizationPhase:
 class PhaseEvent:
     """
     The solver entered a new optimization phase.
-    
+
     Attributes:
         phase (OptimizationPhase): the phase that just started.
     """
@@ -123,20 +126,20 @@ class PhaseEvent:
 class PlacedItem:
     """
     An object representing where a copy of an Item was placed inside the strip.
-    
+
     Attributes:
         id (str): The Item identifier referencing the items of the StripPackingInstance
         rotation (float): The rotation angle in degrees, assuming that the original Item was defined with 0° as its rotation angle.
           Use the origin (0.0,0.0) as the rotation point.
         translation (tuple[float,float]): the translation vector in the X-Y axis. To apply after the rotation
         reflected (bool): Whether the Item is mirrored in this placement. False for Items without a `reflection_axis`.
-    
+
     The placed shape is obtained from the original Item shape by applying, in this order:
-    
+
         1. if `reflected`, the mirroring (x, y) -> (x, -y)
         2. the rotation by `rotation` degrees (counter-clockwise), around the origin (0.0,0.0)
         3. the translation by `translation`
-    
+
     Since mirroring across an axis at angle `a` is the mirroring (x, y) -> (x, -y) followed by a rotation of `2*a`,
     the `rotation` of a reflected placement includes this `2*a` term (modulo 360°).
     """
@@ -154,11 +157,11 @@ class PlacedItem:
 class ProgressQueue:
     """
     A thread-safe queue that collects progress reports from the solver.
-    
+
     Create one before calling `solve()` and pass it as the `progress` argument.
     While the solver runs (in a background thread), call `drain()` to retrieve
     any new reports.
-    
+
     With `detailed=True`, the queue additionally records fine-grained solver events
     (phase changes, separation progress, compression attempts), retrieved with `drain_events()`.
     These are kept apart from `drain()`, which is never affected by `detailed`.
@@ -167,17 +170,17 @@ class ProgressQueue:
     `max_events` events, the oldest one is dropped to make room. Call `drain_events()`
     regularly to avoid losing events; `dropped_events` counts what was lost.
     The reports retrieved by `drain()` are not bounded.
-    
+
     Args:
         detailed (bool, optional): Whether to also record fine-grained events. Defaults to False.
         max_events (int, optional): Capacity of the event buffer. Must be strictly positive.
           Only used if `detailed` is True. Defaults to 10000.
-    
+
     Raises:
         ValueError: If `max_events` is zero.
-    
+
     Example::
-    
+
         queue = spyrrow.ProgressQueue(detailed=True)
         # run solve in a thread, passing progress=queue
         for report_type, solution in queue.drain():
@@ -195,16 +198,16 @@ class ProgressQueue:
     def drain(self, /) -> list[tuple[ReportType, StripPackingSolution]]:
         """
         Drain all pending progress reports from the queue.
-        
+
         Returns:
             list[tuple[ReportType, StripPackingSolution]]: A list of (report_type, solution) tuples.
         """
     def drain_events(self, /) -> "list[PhaseEvent | SeparationProgressEvent | SeparationResultEvent | CompressionProgressEvent]":
         """
         Drain all pending detailed events from the queue, oldest first.
-        
+
         Always empty if the queue was not created with `detailed=True`.
-        
+
         Returns:
             list[PhaseEvent | SeparationProgressEvent | SeparationResultEvent | CompressionProgressEvent]
         """
@@ -223,7 +226,7 @@ class ProgressQueue:
 class ReportType:
     """
     The type of progress report emitted by the solver.
-    
+
     Variants:
         ExplFeas: Feasible solution found during exploration.
         ExplInfeas: Infeasible solution during exploration.
@@ -243,7 +246,7 @@ class ReportType:
     def phase_name(self, /) -> str:
         """
         Return a human-readable phase name.
-        
+
         Returns:
             Literal["exploring", "compressing", "final"]: string representing the phase
         """
@@ -252,10 +255,10 @@ class ReportType:
 class SeparationProgressEvent:
     """
     Progress of one separation attempt (the solver tries to remove all overlaps at a given strip width).
-    
+
     Emitted once for the initial layout (`iteration == 0`), then after each completed iteration.
     This is a high-frequency event.
-    
+
     Attributes:
         strip_width (float): the strip width being separated.
         density (float): the density of the layout, as a fraction in [0, 1] (same convention as `StripPackingSolution.density`).
@@ -276,7 +279,7 @@ class SeparationProgressEvent:
 class SeparationResultEvent:
     """
     Outcome of a finished separation attempt.
-    
+
     Attributes:
         success (bool): whether all overlaps were removed.
         elapsed_seconds (float): wall-clock duration of the attempt.
@@ -300,13 +303,13 @@ class SeparationResultEvent:
 class StripPackingConfig:
     """
     Initializes a configuration object for the strip packing algorithm.
-    
+
     Either `total_computation_time`, or both `exploration_time` and `compression_time`, must be provided.
     Providing all three or only one of the latter two raises an error.
     If `total_computation_time` is provided, 80% of it is allocated to exploration and 20% to compression.
     If `seed` is not provided, a random seed will be generated.
-    
-    
+
+
     Args:
         early_termination (bool, optional): Whether to allow early termination of the algorithm. Defaults to True.
         quadtree_depth (int, optional): Maximum depth of the quadtree used by the collision detection engine jagua-rs.
@@ -360,22 +363,22 @@ class StripPackingConfig:
           Can be 0. Defaults to 25, sparrow's default.
         cd_threshold (int, optional): Collision detection engine: the quadtree traversal stops and edges are tested directly
           when a node holds fewer edges than this threshold. Must fit in 0..=255. Defaults to 64, sparrow's default.
-    
+
     Raises:
         ValueError: If the combination of time arguments is invalid, if `max_evaluations` is 0, or if an advanced option has an invalid value.
-    
+
     The advanced options are meant for power users, the defaults reproduce the historical behaviour of spyrrow exactly.
     """
     def __deepcopy__(self, /, _memo: Any) -> StripPackingConfig: ...
-    def __new__(cls, /, early_termination: bool = True, quadtree_depth: int = 4, min_items_separation: float |None = None, total_computation_time: int |None = 600, exploration_time: int |None = None, compression_time: int |None = None, num_workers: int |None = None, seed: int |None = None, max_evaluations: int |None = None, narrow_concavity_cutoff: tuple[float, float] |None = None, poly_simpl_tolerance: float |None = ..., max_conseq_failed_attempts: int |None = None, compression_failure_decay_ratio: float |None = None, iter_no_imprv_limit: int |None = None, strike_limit: int |None = None, n_container_samples: int = ..., n_focussed_samples: int = ..., cd_threshold: int = ...) -> StripPackingConfig: ...
+    def __new__(cls, /, early_termination: bool = True, quadtree_depth: int = 4, min_items_separation: float | None = None, total_computation_time: int | None = 600, exploration_time: int | None = None, compression_time: int | None = None, num_workers: int | None = None, seed: int | None = None, max_evaluations: int | None = None, narrow_concavity_cutoff: tuple[float, float] | None = None, poly_simpl_tolerance: float | None = ..., max_conseq_failed_attempts: int | None = None, compression_failure_decay_ratio: float | None = None, iter_no_imprv_limit: int | None = None, strike_limit: int | None = None, n_container_samples: int = ..., n_focussed_samples: int = ..., cd_threshold: int = ...) -> StripPackingConfig: ...
     @property
     def cd_threshold(self, /) -> int: ...
     @cd_threshold.setter
     def cd_threshold(self, /, value: int) -> None: ...
     @property
-    def compression_failure_decay_ratio(self, /) -> float |None: ...
+    def compression_failure_decay_ratio(self, /) -> float | None: ...
     @compression_failure_decay_ratio.setter
-    def compression_failure_decay_ratio(self, /, value: float |None) -> None: ...
+    def compression_failure_decay_ratio(self, /, value: float | None) -> None: ...
     @property
     def compression_time(self, /) -> timedelta: ...
     @compression_time.setter
@@ -389,21 +392,21 @@ class StripPackingConfig:
     @exploration_time.setter
     def exploration_time(self, /, value: timedelta) -> None: ...
     @property
-    def iter_no_imprv_limit(self, /) -> int |None: ...
+    def iter_no_imprv_limit(self, /) -> int | None: ...
     @iter_no_imprv_limit.setter
-    def iter_no_imprv_limit(self, /, value: int |None) -> None: ...
+    def iter_no_imprv_limit(self, /, value: int | None) -> None: ...
     @property
-    def max_conseq_failed_attempts(self, /) -> int |None: ...
+    def max_conseq_failed_attempts(self, /) -> int | None: ...
     @max_conseq_failed_attempts.setter
-    def max_conseq_failed_attempts(self, /, value: int |None) -> None: ...
+    def max_conseq_failed_attempts(self, /, value: int | None) -> None: ...
     @property
-    def max_evaluations(self, /) -> int |None: ...
+    def max_evaluations(self, /) -> int | None: ...
     @max_evaluations.setter
-    def max_evaluations(self, /, value: int |None) -> None: ...
+    def max_evaluations(self, /, value: int | None) -> None: ...
     @property
-    def min_items_separation(self, /) -> float |None: ...
+    def min_items_separation(self, /) -> float | None: ...
     @min_items_separation.setter
-    def min_items_separation(self, /, value: float |None) -> None: ...
+    def min_items_separation(self, /, value: float | None) -> None: ...
     @property
     def n_container_samples(self, /) -> int: ...
     @n_container_samples.setter
@@ -413,17 +416,17 @@ class StripPackingConfig:
     @n_focussed_samples.setter
     def n_focussed_samples(self, /, value: int) -> None: ...
     @property
-    def narrow_concavity_cutoff(self, /) -> tuple[float, float] |None: ...
+    def narrow_concavity_cutoff(self, /) -> tuple[float, float] | None: ...
     @narrow_concavity_cutoff.setter
-    def narrow_concavity_cutoff(self, /, value: tuple[float, float] |None) -> None: ...
+    def narrow_concavity_cutoff(self, /, value: tuple[float, float] | None) -> None: ...
     @property
     def num_workers(self, /) -> int: ...
     @num_workers.setter
     def num_workers(self, /, value: int) -> None: ...
     @property
-    def poly_simpl_tolerance(self, /) -> float |None: ...
+    def poly_simpl_tolerance(self, /) -> float | None: ...
     @poly_simpl_tolerance.setter
-    def poly_simpl_tolerance(self, /, value: float |None) -> None: ...
+    def poly_simpl_tolerance(self, /, value: float | None) -> None: ...
     @property
     def quadtree_depth(self, /) -> int: ...
     @quadtree_depth.setter
@@ -433,13 +436,13 @@ class StripPackingConfig:
     @seed.setter
     def seed(self, /, value: int) -> None: ...
     @property
-    def strike_limit(self, /) -> int |None: ...
+    def strike_limit(self, /) -> int | None: ...
     @strike_limit.setter
-    def strike_limit(self, /, value: int |None) -> None: ...
+    def strike_limit(self, /, value: int | None) -> None: ...
     def to_json_str(self, /) -> str:
         """
         Return a string of the JSON representation of the object
-        
+
         Returns:
             str
         """
@@ -448,13 +451,13 @@ class StripPackingConfig:
 class StripPackingInstance:
     """
     An Instance of a Strip Packing Problem.
-    
+
     Args:
         name (str): The name of the instance. Required by the underlying sparrow library.
           An empty string '' can be used, if the user doesn't have a use for this name.
         strip_height (float): the fixed height of the strip. The unit should be compatible with the Item
         items (Sequence[Item]): The Items which defines the instances. All Items should be defined with the same scale ( same length unit).
-    
+
      Raises:
         ValueError
     """
@@ -468,10 +471,10 @@ class StripPackingInstance:
     def name(self, /) -> str: ...
     @name.setter
     def name(self, /, value: str) -> None: ...
-    def solve(self, /, config: StripPackingConfig, progress: ProgressQueue |None = None, initial_solution: StripPackingSolution |None = None) -> StripPackingSolution:
+    def solve(self, /, config: StripPackingConfig, progress: ProgressQueue | None = None, initial_solution: StripPackingSolution | None = None) -> StripPackingSolution:
         """
         The method to solve the instance.
-        
+
         Args:
             config (StripPackingConfig): The configuration object to control how the instance is solved.
             progress (ProgressQueue, optional): If provided, progress reports are pushed to this
@@ -490,10 +493,10 @@ class StripPackingInstance:
               A solution computed with a smaller separation or another strip height is typically not feasible.
               Ignored for an instance without items (which must then be given an empty solution).
               Defaults to None.
-        
+
         Returns:
             a StripPackingSolution
-        
+
         Raises:
             ValueError: If an advanced option of the config was set to an invalid value after its creation.
             ValueError: If the instance can not be imported by the solver (invalid shape, separation larger than the strip height, ...),
@@ -507,36 +510,36 @@ class StripPackingInstance:
     def to_json_str(self, /) -> str:
         """
         Return a string of the JSON representation of the object
-        
+
         Returns:
             str
         """
-    def to_sparrow_json_str(self, /, config: StripPackingConfig |None = None, solution: StripPackingSolution |None = None) -> str:
+    def to_sparrow_json_str(self, /, config: StripPackingConfig | None = None, solution: StripPackingSolution | None = None) -> str:
         """
         Return a JSON string in the input format of the sparrow command line tool (and Sparrow Studio),
         to reproduce or debug a spyrrow run outside of Python.
-        
+
         Without `solution`, the result is an instance file, to be given to `sparrow -i`.
         With `solution`, the instance and the solution are put in a single document (the format of
         the output of sparrow), which `sparrow -i` uses as a warm start.
         Items are identified by their index in `items` (the string ids are not exported).
         Only `min_items_separation` of the configuration is part of the instance;
         the time limits, seed, number of workers, ... are options of the sparrow command line.
-        
+
         Warning: the solution is exported as is. If `config` has a `min_items_separation` (or the instance a
         `strip_height`) different from the one the solution was computed with, the exported warm start is
         infeasible, and the sparrow command line handles an infeasible start poorly (it may run far past its
         time limit, or return the infeasible layout). Export a solution with the config it was solved with.
-        
+
         Args:
             config (StripPackingConfig, optional): If given, its `min_items_separation` is exported
               as the minimum separation of the instance. Defaults to None, meaning no separation.
             solution (StripPackingSolution, optional): A solution of this instance to export along with it.
               Defaults to None.
-        
+
         Returns:
             str
-        
+
         Raises:
             ValueError: If the solution places an item which is not an item of the instance.
         """
@@ -545,9 +548,9 @@ class StripPackingInstance:
 class StripPackingSolution:
     """
     An object representing the solution to a given StripPackingInstance.
-    
+
     Can not be directly instantiated. Result from StripPackingInstance.solve.
-    
+
     Attributes:
         width (float): the width of the strip found to contains all Items. In the same unit as input.
         placed_items (list[PlacedItem]): a list of all PlacedItems, describing how Items are placed in the solution
@@ -561,7 +564,7 @@ class StripPackingSolution:
     def to_json_str(self, /) -> str:
         """
         Return a string of the JSON representation of the object
-        
+
         Returns:
             str
         """
