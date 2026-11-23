@@ -312,8 +312,8 @@ class StripPackingConfig:
 
     Args:
         early_termination (bool, optional): Whether to allow early termination of the algorithm. Defaults to True.
-        quadtree_depth (int, optional): Maximum depth of the quadtree used by the collision detection engine jagua-rs.
-          Must be positive, common values are 3,4,5. Defaults to 4.
+        quadtree_depth (Optional[int], optional): Deprecated and ignored: the collision detection engine of jagua-rs 2.0
+          has no quadtree. Passing it emits a DeprecationWarning; it will be removed in a future version. Defaults to None.
         min_items_separation (Optional[float], optional): Minimum required distance between packed items. Defaults to None.
         total_computation_time (Optional[int], optional): Total time budget in seconds.
           Used if `exploration_time` and `compression_time` are not provided. Defaults to 600.
@@ -361,8 +361,6 @@ class StripPackingConfig:
           Must be strictly positive. Defaults to 50, sparrow's default.
         n_focussed_samples (int, optional): Number of placements sampled around the item's current position for each item move.
           Can be 0. Defaults to 25, sparrow's default.
-        cd_threshold (int, optional): Collision detection engine: the quadtree traversal stops and edges are tested directly
-          when a node holds fewer edges than this threshold. Must fit in 0..=255. Defaults to 64, sparrow's default.
 
     Raises:
         ValueError: If the combination of time arguments is invalid, if `max_evaluations` is 0, or if an advanced option has an invalid value.
@@ -370,11 +368,7 @@ class StripPackingConfig:
     The advanced options are meant for power users, the defaults reproduce the historical behaviour of spyrrow exactly.
     """
     def __deepcopy__(self, /, _memo: Any) -> StripPackingConfig: ...
-    def __new__(cls, /, early_termination: bool = True, quadtree_depth: int = 4, min_items_separation: float | None = None, total_computation_time: int | None = 600, exploration_time: int | None = None, compression_time: int | None = None, num_workers: int | None = None, seed: int | None = None, max_evaluations: int | None = None, narrow_concavity_cutoff: tuple[float, float] | None = None, poly_simpl_tolerance: float | None = ..., max_conseq_failed_attempts: int | None = None, compression_failure_decay_ratio: float | None = None, iter_no_imprv_limit: int | None = None, strike_limit: int | None = None, n_container_samples: int = ..., n_focussed_samples: int = ..., cd_threshold: int = ...) -> StripPackingConfig: ...
-    @property
-    def cd_threshold(self, /) -> int: ...
-    @cd_threshold.setter
-    def cd_threshold(self, /, value: int) -> None: ...
+    def __new__(cls, /, early_termination: bool = True, quadtree_depth: int | None = None, min_items_separation: float | None = None, total_computation_time: int | None = 600, exploration_time: int | None = None, compression_time: int | None = None, num_workers: int | None = None, seed: int | None = None, max_evaluations: int | None = None, narrow_concavity_cutoff: tuple[float, float] | None = None, poly_simpl_tolerance: float | None = ..., max_conseq_failed_attempts: int | None = None, compression_failure_decay_ratio: float | None = None, iter_no_imprv_limit: int | None = None, strike_limit: int | None = None, n_container_samples: int = ..., n_focussed_samples: int = ...) -> StripPackingConfig: ...
     @property
     def compression_failure_decay_ratio(self, /) -> float | None: ...
     @compression_failure_decay_ratio.setter

@@ -50,7 +50,6 @@ def test_defaults_values():
     assert config.strike_limit is None
     assert config.n_container_samples == 50
     assert config.n_focussed_samples == 25
-    assert config.cd_threshold == 64
 
 
 def test_json_is_additive():
@@ -66,7 +65,6 @@ def test_json_is_additive():
         "strike_limit",
         "n_container_samples",
         "n_focussed_samples",
-        "cd_threshold",
     }
     config = spyrrow.StripPackingConfig(
         total_computation_time=5, narrow_concavity_cutoff=(0.02, 0.03), strike_limit=7
@@ -92,7 +90,6 @@ def test_explicit_defaults_reproduce_implicit_defaults():
             strike_limit=None,
             n_container_samples=50,
             n_focussed_samples=25,
-            cd_threshold=64,
         )
     )
     assert signature(implicit) == signature(implicit_again), "run is not reproducible, comparison is moot"
@@ -166,7 +163,6 @@ def test_non_default_values_run():
         strike_limit=2,
         n_container_samples=20,
         n_focussed_samples=0,
-        cd_threshold=32,
     )
     sol = instance.solve(config)
     assert_valid_solution(instance, sol)
@@ -215,7 +211,7 @@ def test_invalid_values_raise(kwargs):
 
 @pytest.mark.parametrize(
     "kwargs",
-    [dict(cd_threshold=256), dict(cd_threshold=-1), dict(n_focussed_samples=-1)],
+    [dict(n_focussed_samples=-1), dict(n_container_samples=-1)],
 )
 def test_out_of_range_integers_raise(kwargs):
     with pytest.raises((OverflowError, ValueError)):
@@ -224,7 +220,7 @@ def test_out_of_range_integers_raise(kwargs):
 
 def test_zero_focussed_samples_and_zero_tolerance_are_valid():
     config = spyrrow.StripPackingConfig(
-        total_computation_time=5, n_focussed_samples=0, poly_simpl_tolerance=0.0, cd_threshold=0
+        total_computation_time=5, n_focussed_samples=0, poly_simpl_tolerance=0.0
     )
     assert config.n_focussed_samples == 0
 
@@ -244,8 +240,24 @@ def test_deepcopy_keeps_advanced_options():
     import copy
 
     config = spyrrow.StripPackingConfig(
-        total_computation_time=5, narrow_concavity_cutoff=(0.02, 0.03), cd_threshold=10
+        total_computation_time=5, narrow_concavity_cutoff=(0.02, 0.03), strike_limit=4
     )
     clone = copy.deepcopy(config)
     assert clone.narrow_concavity_cutoff == pytest.approx((0.02, 0.03))
-    assert clone.cd_threshold == 10
+    assert clone.strike_limit == 4
+
+
+def test_quadtree_depth_is_deprecated_but_still_accepted():
+    # jagua-rs 2.0 has no quadtree: the option is ignored, code that passes it keeps working
+    with pytest.warns(DeprecationWarning, match="quadtree_depth"):
+        config = spyrrow.StripPackingConfig(total_computation_time=5, quadtree_depth=5)
+    assert config.quadtree_depth == 5
+
+
+def test_quadtree_depth_not_passed_does_not_warn():
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        config = spyrrow.StripPackingConfig(total_computation_time=5)
+    assert "quadtree_depth" in json.loads(config.to_json_str())

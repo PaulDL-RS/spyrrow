@@ -5,7 +5,7 @@ use jagua_rs::io::ext_repr::{
 use jagua_rs::io::import::Importer;
 use jagua_rs::probs::spp::entities::{SPProblem, SPSolution};
 use jagua_rs::probs::spp::io::ext_repr::{ExtItem, ExtSPInstance, ExtSPSolution};
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyDeprecationWarning, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use rand::SeedableRng;
 use rand::rngs::Xoshiro256PlusPlus;
@@ -34,12 +34,13 @@ const DEFAULT_N_CONTAINER_SAMPLES: usize = DEFAULT_SPARROW_CONFIG
     .separator_config
     .sample_config
     .n_container_samples;
+// Former default of the quadtree depth, reported by the deprecated `quadtree_depth` attribute
+const DEPRECATED_QUADTREE_DEPTH: u8 = 4;
 const DEFAULT_N_FOCUSSED_SAMPLES: usize = DEFAULT_SPARROW_CONFIG
     .expl_cfg
     .separator_config
     .sample_config
     .n_focussed_samples;
-const DEFAULT_CD_THRESHOLD: u8 = DEFAULT_SPARROW_CONFIG.cde_config.cd_threshold;
 
 #[pyclass(name = "Item", get_all, set_all, from_py_object)]
 #[derive(Clone, Serialize)]
@@ -678,8 +679,8 @@ fn all_unique(strings: &[&str]) -> bool {
 ///
 /// Args:
 ///     early_termination (bool, optional): Whether to allow early termination of the algorithm. Defaults to True.
-///     quadtree_depth (int, optional): Maximum depth of the quadtree used by the collision detection engine jagua-rs.
-///       Must be positive, common values are 3,4,5. Defaults to 4.
+///     quadtree_depth (Optional[int], optional): Deprecated and ignored: the collision detection engine of jagua-rs 2.0
+///       has no quadtree. Passing it emits a DeprecationWarning; it will be removed in a future version. Defaults to None.
 ///     min_items_separation (Optional[float], optional): Minimum required distance between packed items. Defaults to None.
 ///     total_computation_time (Optional[int], optional): Total time budget in seconds.
 ///       Used if `exploration_time` and `compression_time` are not provided. Defaults to 600.
@@ -727,8 +728,6 @@ fn all_unique(strings: &[&str]) -> bool {
 ///       Must be strictly positive. Defaults to 50, sparrow's default.
 ///     n_focussed_samples (int, optional): Number of placements sampled around the item's current position for each item move.
 ///       Can be 0. Defaults to 25, sparrow's default.
-///     cd_threshold (int, optional): Collision detection engine: the quadtree traversal stops and edges are tested directly
-///       when a node holds fewer edges than this threshold. Must fit in 0..=255. Defaults to 64, sparrow's default.
 ///
 /// Raises:
 ///     ValueError: If the combination of time arguments is invalid, if `max_evaluations` is 0, or if an advanced option has an invalid value.
@@ -753,7 +752,6 @@ struct StripPackingConfigPy {
     strike_limit: Option<usize>,
     n_container_samples: usize,
     n_focussed_samples: usize,
-    cd_threshold: u8,
 }
 
 impl StripPackingConfigPy {
@@ -809,10 +807,11 @@ impl StripPackingConfigPy {
 impl StripPackingConfigPy {
     #[new]
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (early_termination=true,quadtree_depth=4,min_items_separation=None,total_computation_time=600,exploration_time=None,compression_time=None,num_workers=None,seed=None,max_evaluations=None,narrow_concavity_cutoff=None,poly_simpl_tolerance=DEFAULT_POLY_SIMPL_TOLERANCE,max_conseq_failed_attempts=None,compression_failure_decay_ratio=None,iter_no_imprv_limit=None,strike_limit=None,n_container_samples=DEFAULT_N_CONTAINER_SAMPLES,n_focussed_samples=DEFAULT_N_FOCUSSED_SAMPLES,cd_threshold=DEFAULT_CD_THRESHOLD))]
+    #[pyo3(signature = (early_termination=true,quadtree_depth=None,min_items_separation=None,total_computation_time=600,exploration_time=None,compression_time=None,num_workers=None,seed=None,max_evaluations=None,narrow_concavity_cutoff=None,poly_simpl_tolerance=DEFAULT_POLY_SIMPL_TOLERANCE,max_conseq_failed_attempts=None,compression_failure_decay_ratio=None,iter_no_imprv_limit=None,strike_limit=None,n_container_samples=DEFAULT_N_CONTAINER_SAMPLES,n_focussed_samples=DEFAULT_N_FOCUSSED_SAMPLES))]
     fn new(
+        py: Python<'_>,
         early_termination: bool,
-        quadtree_depth: u8,
+        quadtree_depth: Option<u8>,
         min_items_separation: Option<f32>,
         total_computation_time: Option<u64>,
         exploration_time: Option<u64>,
@@ -828,8 +827,17 @@ impl StripPackingConfigPy {
         strike_limit: Option<usize>,
         n_container_samples: usize,
         n_focussed_samples: usize,
-        cd_threshold: u8,
     ) -> PyResult<Self> {
+        if quadtree_depth.is_some() {
+            PyErr::warn(
+                py,
+                py.get_type::<PyDeprecationWarning>().as_any(),
+                c"quadtree_depth is ignored since spyrrow 0.10: jagua-rs 2.0 has no quadtree. It will be removed.",
+                1,
+            )?;
+        }
+        // Kept so that the attribute and the JSON keep their shape until the option is removed
+        let quadtree_depth = quadtree_depth.unwrap_or(DEPRECATED_QUADTREE_DEPTH);
         let (exploration_time, compression_time) = match (
             total_computation_time,
             exploration_time,
@@ -868,7 +876,6 @@ impl StripPackingConfigPy {
             strike_limit,
             n_container_samples,
             n_focussed_samples,
-            cd_threshold,
         };
         config.validate_advanced()?;
         Ok(config)
@@ -1189,8 +1196,6 @@ impl StripPackingInstancePy {
             separator_config.sample_config.n_container_samples = config.n_container_samples;
             separator_config.sample_config.n_focussed_samples = config.n_focussed_samples;
         }
-        rs_config.cde_config.quadtree_depth = config.quadtree_depth;
-        rs_config.cde_config.cd_threshold = config.cd_threshold;
         rs_config.poly_simpl_tolerance = config.poly_simpl_tolerance;
         rs_config.narrow_concavity_cutoff_ratio = config.narrow_concavity_cutoff;
 
