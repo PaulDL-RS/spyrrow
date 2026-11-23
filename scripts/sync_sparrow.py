@@ -55,6 +55,18 @@ def jagua_dep_line(sparrow_cargo: dict) -> str:
         sys.exit("Could not find jagua-rs in sparrow's Cargo.toml")
     if isinstance(spec, str):
         spec = {"version": spec}
+    if spec.get("workspace"):
+        # sparrow is a workspace since its CLI got its own crate: the version and features
+        # live in [workspace.dependencies], the member may add features of its own
+        workspace_deps = sparrow_cargo.get("workspace", {}).get("dependencies", {})
+        workspace_spec = workspace_deps.get("jagua-rs")
+        if workspace_spec is None:
+            sys.exit("jagua-rs is inherited from sparrow's workspace, which lacks it")
+        if isinstance(workspace_spec, str):
+            workspace_spec = {"version": workspace_spec}
+        features = set(workspace_spec.get("features", []))
+        features |= set(spec.get("features", []))
+        spec = {**workspace_spec, "features": sorted(features)}
     features = sorted(set(spec.get("features", [])) | {"spp"})
     features_str = ", ".join(f'"{f}"' for f in features)
     if "git" in spec:
