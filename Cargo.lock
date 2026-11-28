@@ -680,7 +680,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "sparrow"
 version = "0.3.0"
-source = "git+https://github.com/JeroenGar/sparrow.git?rev=b8ef03312b7a195895f6c5332c6674dd78420ede#b8ef03312b7a195895f6c5332c6674dd78420ede"
+source = "git+https://github.com/JeroenGar/sparrow.git?rev=6186a79ecc33ba74a4b559b74eb68910c830e073#6186a79ecc33ba74a4b559b74eb68910c830e073"
 dependencies = [
  "anyhow",
  "float-cmp",
